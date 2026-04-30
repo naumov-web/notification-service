@@ -1,8 +1,14 @@
 import { Module } from '@nestjs/common';
-import { DatabaseService } from './database.service';
+import { TypeOrmModule } from '@nestjs/typeorm';
 
 @Module({
-  providers: [DatabaseService],
-  exports: [DatabaseService],
+  imports: [
+    TypeOrmModule.forRoot({
+      type: 'postgres',
+      url: process.env.DATABASE_URL,
+      autoLoadEntities: true,
+      synchronize: false,
+    }),
+  ],
 })
 export class DatabaseModule {}

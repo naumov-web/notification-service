@@ -1,4 +1,4 @@
-COMPOSE=docker compose -f docker/docker-compose.dev.yml
+COMPOSE=docker compose -f docker-compose.yaml
 SERVICE=api
 
 # --- core ---
