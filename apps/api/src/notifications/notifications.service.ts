@@ -23,7 +23,7 @@ export class NotificationsService {
                 userId: dto.userId,
                 eventType: dto.eventType,
                 parameters: dto.parameters,
-                sendAt: dto.sendAt ? new Date(dto.sendAt) : null,
+                sendAt: dto.sendAt ? new Date(dto.sendAt) : undefined,
             });
 
             await queryRunner.manager.save(notification);

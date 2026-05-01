@@ -28,6 +28,16 @@ add:
 remove:
 	$(COMPOSE) exec $(SERVICE) npm remove $(pkg)
 
+# --- roles ---
+api:
+	$(COMPOSE) exec app npm run start:dev:api
+
+worker:
+	$(COMPOSE) exec app npm run start:dev:worker
+
+scheduler:
+	$(COMPOSE) exec app npm run start:dev:scheduler
+
 # --- dev helpers ---
 api:
 	$(COMPOSE) exec api sh
@@ -37,3 +47,12 @@ worker:
 
 scheduler:
 	$(COMPOSE) exec scheduler sh
+
+migrate:
+	$(COMPOSE) exec api npm run migration:run
+
+migration-generate:
+	$(COMPOSE) exec api npm run migration:generate
+
+migration-revert:
+	$(COMPOSE) exec api npm run migration:revert
