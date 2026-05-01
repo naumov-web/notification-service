@@ -21,14 +21,14 @@ export class OutboxProcessor {
     ) {}
 
     async processBatch() {
-        const events = await this.lockBatch(this.batchSize);
+        const [events] = await this.lockBatch(this.batchSize);
 
         for (const event of events) {
             await this.processEvent(event);
         }
     }
 
-    private async lockBatch(limit: number): Promise<OutboxEvent[]> {
+    private async lockBatch(limit: number): Promise<[OutboxEvent[], number]> {
         return this.dataSource.query(
             `update outbox_events
                 set status = $1
@@ -36,12 +36,12 @@ export class OutboxProcessor {
                     select id
                     from outbox_events
                     where status in ($2, $3)
-                      and (next_retry_at is null or next_retry_at <= now())
-                    order by created_at asc
+                      and ("nextRetryAt" is null or "nextRetryAt" <= now())
+                    order by "createdAt" asc
                     for update skip locked
-                            limit $4
-                            )
-                            returning *;
+                    limit $4
+                )
+            returning *;
             `,
             [
                 OutboxStatus.PROCESSING,
@@ -105,7 +105,7 @@ export class OutboxProcessor {
             `update outbox_events
                 set status = $1,
                     attempts = $2,
-                    next_retry_at = $3
+                    "nextRetryAt" = $3
                 where id = $4
             `,
             [

@@ -30,23 +30,17 @@ remove:
 
 # --- roles ---
 api:
-	$(COMPOSE) exec app npm run start:dev:api
+	$(COMPOSE) exec $(SERVICE) npm run start:dev:api
 
 worker:
-	$(COMPOSE) exec app npm run start:dev:worker
+	$(COMPOSE) exec $(SERVICE) npm run start:dev:worker
 
 scheduler:
-	$(COMPOSE) exec app npm run start:dev:scheduler
+	$(COMPOSE) exec $(SERVICE) npm run start:dev:scheduler
 
 # --- dev helpers ---
 api:
 	$(COMPOSE) exec api sh
-
-worker:
-	$(COMPOSE) exec worker sh
-
-scheduler:
-	$(COMPOSE) exec scheduler sh
 
 migrate:
 	$(COMPOSE) exec api npm run migration:run

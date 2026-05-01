@@ -3,6 +3,6 @@ export interface ChannelStrategy {
 
     send(input: {
         target: string;
-        content: string;
+        content: string | undefined;
     }): Promise<void>;
 }

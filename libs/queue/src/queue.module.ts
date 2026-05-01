@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
 import { QueueService } from './queue.service';
+import {RabbitMQService} from "@app/queue/rabbitmq.service";
 
 @Module({
-  providers: [QueueService],
-  exports: [QueueService],
+  providers: [QueueService, RabbitMQService],
+  exports: [QueueService, RabbitMQService],
 })
 export class QueueModule {}

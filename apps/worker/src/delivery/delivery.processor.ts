@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 
 import { Delivery } from '@app/database/entities/delivery.entity';
 import { ChannelStrategyFactory } from './channel-strategy.factory';
+import {Notification} from "@app/database/entities/notification.entity";
 
 @Injectable()
 export class DeliveryProcessor {
@@ -12,6 +13,8 @@ export class DeliveryProcessor {
     constructor(
         @InjectRepository(Delivery)
         private readonly repo: Repository<Delivery>,
+        @InjectRepository(Notification)
+        private readonly repoNotification: Repository<Notification>,
         private readonly factory: ChannelStrategyFactory,
     ) {}
 
@@ -23,6 +26,8 @@ export class DeliveryProcessor {
         for (const delivery of deliveries) {
             await this.processOne(delivery);
         }
+
+        await this.updateNotificationStatus(notificationId);
     }
 
     private async processOne(delivery: Delivery) {
@@ -44,5 +49,38 @@ export class DeliveryProcessor {
 
             await this.repo.save(delivery);
         }
+    }
+
+    private async updateNotificationStatus(notificationId: string) {
+        await this.repoNotification.query(
+            `update notifications n
+             set status = case
+                              when not exists (
+                                  select 1
+                                  from deliveries d
+                                  where d."notificationId" = n.id
+                                    and d.status != $2
+                              ) then $3::notifications_status_enum
+
+                              when exists (
+                                  select 1
+                                  from deliveries d
+                                  where d."notificationId" = n.id
+                                    and d.status = $4
+                              ) then $5::notifications_status_enum
+
+                              else $6::notifications_status_enum
+                 end
+             where n.id = $1
+            `,
+            [
+                notificationId,
+                'sent',
+                'done',
+                'failed',
+                'failed',
+                'processing',
+            ],
+        );
     }
 }
