@@ -11,8 +11,7 @@ export class EmailStrategy implements ChannelStrategy {
 
     async send(input: { target: string; content: string }): Promise<void> {
         this.logger.log(`sending email to ${input.target}`);
-
-        await new Promise((r) => setTimeout(r, 500));
+        await new Promise((r) => setTimeout(r, 10000));
 
         this.logger.log(`email sent: ${input.content}`);
     }
