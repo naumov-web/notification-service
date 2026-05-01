@@ -6,6 +6,13 @@ import {
     Index,
 } from 'typeorm';
 
+export enum OutboxStatus {
+    PENDING = 'pending',
+    PROCESSING = 'processing',
+    PROCESSED = 'processed',
+    FAILED = 'failed',
+}
+
 @Entity('outbox_events')
 export class OutboxEvent {
     @PrimaryGeneratedColumn('uuid')
@@ -18,9 +25,20 @@ export class OutboxEvent {
     @Column({ type: 'jsonb' })
     payload: Record<string, any>;
 
-    @Column({ default: false })
+    @Column({
+        type: 'enum',
+        enum: OutboxStatus,
+        default: OutboxStatus.PENDING,
+    })
     @Index()
-    processed: boolean;
+    status: OutboxStatus;
+
+    @Column({ default: 0 })
+    attempts: number;
+
+    @Column({ type: 'timestamp', nullable: true })
+    @Index()
+    nextRetryAt?: Date;
 
     @CreateDateColumn()
     @Index()
