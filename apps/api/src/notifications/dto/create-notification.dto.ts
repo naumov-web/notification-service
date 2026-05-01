@@ -1,5 +1,3 @@
-// apps/api/src/notifications/dto/create-notification.dto.ts
-
 import {
     IsUUID,
     IsOptional,

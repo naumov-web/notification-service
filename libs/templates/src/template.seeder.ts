@@ -36,7 +36,6 @@ export class TemplateSeeder {
         });
 
         if (existing) {
-            // можно обновлять, если хочешь
             existing.subject = def.subject;
             existing.body = def.body;
             existing.parametersSchema = def.parametersSchema;
