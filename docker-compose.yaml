@@ -17,33 +17,6 @@ services:
       - db
       - mq
 
-  worker:
-    build:
-      context: .
-      dockerfile: ./deployment/local/node/Dockerfile
-    command: npm run start:dev worker
-    volumes:
-      - ./:/app
-      - /app/node_modules
-    env_file:
-      - ./.env
-    depends_on:
-      - db
-      - mq
-
-  scheduler:
-    build:
-      context: .
-      dockerfile: ./deployment/local/node/Dockerfile
-    command: npm run start:dev scheduler
-    volumes:
-      - ./:/app
-      - /app/node_modules
-    env_file:
-      - ./.env
-    depends_on:
-      - db
-
   db:
     image: postgres:15
     ports:

@@ -1,4 +1,4 @@
-COMPOSE=docker compose -f docker/docker-compose.dev.yml
+COMPOSE=docker compose -f docker-compose.yaml
 SERVICE=api
 
 # --- core ---
@@ -28,12 +28,25 @@ add:
 remove:
 	$(COMPOSE) exec $(SERVICE) npm remove $(pkg)
 
+# --- roles ---
+api:
+	$(COMPOSE) exec $(SERVICE) npm run start:dev:api
+
+worker:
+	$(COMPOSE) exec $(SERVICE) npm run start:dev:worker
+
+scheduler:
+	$(COMPOSE) exec $(SERVICE) npm run start:dev:scheduler
+
 # --- dev helpers ---
 api:
 	$(COMPOSE) exec api sh
 
-worker:
-	$(COMPOSE) exec worker sh
+migrate:
+	$(COMPOSE) exec api npm run migration:run
 
-scheduler:
-	$(COMPOSE) exec scheduler sh
+migration-generate:
+	$(COMPOSE) exec api npm run migration:generate
+
+migration-revert:
+	$(COMPOSE) exec api npm run migration:revert

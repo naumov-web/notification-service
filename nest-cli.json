@@ -37,6 +37,15 @@
         "tsConfigPath": "libs/database/tsconfig.lib.json"
       }
     },
+    "query": {
+      "type": "library",
+      "root": "libs/query",
+      "entryFile": "index",
+      "sourceRoot": "libs/query/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/query/tsconfig.lib.json"
+      }
+    },
     "queue": {
       "type": "library",
       "root": "libs/queue",
@@ -53,6 +62,15 @@
       "sourceRoot": "apps/scheduler/src",
       "compilerOptions": {
         "tsConfigPath": "apps/scheduler/tsconfig.app.json"
+      }
+    },
+    "swagger": {
+      "type": "library",
+      "root": "libs/swagger",
+      "entryFile": "index",
+      "sourceRoot": "libs/swagger/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/swagger/tsconfig.lib.json"
       }
     },
     "templates": {
