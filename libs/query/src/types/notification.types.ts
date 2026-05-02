@@ -27,11 +27,4 @@ export interface NotificationDetails {
         status: string;
         target: string;
     }[];
-
-    stats: {
-        total: number;
-        sent: number;
-        failed: number;
-        pending: number;
-    };
 }
