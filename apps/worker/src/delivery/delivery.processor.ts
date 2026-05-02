@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { DataSource } from 'typeorm';
 
 import { Delivery } from '@app/database/entities/delivery.entity';
 import { ChannelStrategyFactory } from './channel-strategy.factory';
@@ -16,18 +17,47 @@ export class DeliveryProcessor {
         @InjectRepository(Notification)
         private readonly repoNotification: Repository<Notification>,
         private readonly factory: ChannelStrategyFactory,
+        private readonly dataSource: DataSource,
     ) {}
 
     async process(notificationId: string) {
-        const deliveries = await this.repo.find({
-            where: { notificationId, status: 'pending' },
-        });
+        const [deliveries] = await this.dataSource.query(
+            `
+                update deliveries 
+                set status = $1
+                where
+                    "notificationId" = $2
+                    and status = $3
+                returning *;
+            `,
+            [
+                'processing',
+                notificationId,
+                'pending'
+            ]
+        );
 
         for (const delivery of deliveries) {
             await this.processOne(delivery);
         }
 
         await this.updateNotificationStatus(notificationId);
+    }
+
+    async processOneById(deliveryId: string) {
+        const delivery = await this.repo.findOne({
+            where: { id: deliveryId },
+        });
+
+        if (!delivery) {
+            return;
+        }
+
+        if (delivery.status === 'sent') {
+            return;
+        }
+
+        await this.processOne(delivery);
     }
 
     private async processOne(delivery: Delivery) {

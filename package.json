@@ -89,6 +89,7 @@
     "moduleNameMapper": {
       "^@app/common(|/.*)$": "<rootDir>/libs/common/src/$1",
       "^@app/database(|/.*)$": "<rootDir>/libs/database/src/$1",
+      "^@app/query(|/.*)$": "<rootDir>/libs/query/src/$1",
       "^@app/queue(|/.*)$": "<rootDir>/libs/queue/src/$1",
       "^@app/templates(|/.*)$": "<rootDir>/libs/templates/src/$1"
     }

@@ -9,10 +9,12 @@ import {SmsStrategy} from "../../../worker/src/delivery/strategies/sms.strategy"
 import {PushStrategy} from "../../../worker/src/delivery/strategies/push.strategy";
 import { DeliveryCron } from "./delivery.cron";
 import { DeliveryRetryProcessor } from "./delivery-retry.processor";
+import {QueryModule} from "@app/query";
 
 @Module({
     imports: [
         TypeOrmModule.forFeature([Delivery, Notification]),
+        QueryModule
     ],
     providers: [
         DeliveryCron,

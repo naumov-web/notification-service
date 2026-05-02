@@ -2,7 +2,6 @@ import {
     Entity,
     PrimaryGeneratedColumn,
     Column,
-    Index,
     CreateDateColumn,
 } from 'typeorm';
 
@@ -21,7 +20,7 @@ export class Delivery {
     target: string;
 
     @Column({ default: 'pending' })
-    status: 'pending' | 'sent' | 'failed' | 'cancelled';
+    status: 'pending' | 'processing' | 'sent' | 'failed' | 'cancelled';
 
     @Column({ default: 0 })
     attempts: number;

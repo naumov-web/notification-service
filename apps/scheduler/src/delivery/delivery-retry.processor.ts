@@ -1,45 +1,43 @@
-import {Injectable} from "@nestjs/common";
+import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import {Delivery} from "@app/database/entities/delivery.entity";
-import {OutboxEvent} from "@app/database/entities/outbox-event.entity";
+
+import { Delivery } from '@app/database/entities/delivery.entity';
+import { OutboxEvent } from '@app/database/entities/outbox-event.entity';
+
+import { DeliveryRow } from '@app/query/types/delivery.types';
 
 @Injectable()
 export class DeliveryRetryProcessor {
+    private readonly batchSize = 50;
+
     constructor(
-        private readonly dataSource: DataSource
+        private readonly dataSource: DataSource,
     ) {}
 
-    async processBatch(limit = 50) {
+    async processBatch(): Promise<void> {
         const [deliveries] = await this.dataSource.query(
             `
-              update deliveries
-              set status = $1
-              where id in (
-                select id
-                from deliveries
-                where status in ($2, $3)
-                  and ("attempts" < "maxRetries")
-                  and ("nextRetryAt" is null or "nextRetryAt" <= now())
-                order by "createdAt" asc
-                for update skip locked
-                limit $4
-              )
-              returning *;
-              `,
-            [
-                'processing',
-                'pending',
-                'failed',
-                limit,
-            ],
+                update deliveries set status = 'processing'
+                where id in (
+                    select id
+                    from deliveries
+                    where status = $1
+                      and ("attempts" < "maxRetries")
+                      and ("nextRetryAt" is null or "nextRetryAt" <= now())
+                    order by "createdAt" asc
+                            limit $2
+                )
+                returning *;
+            `,
+            ['failed', this.batchSize]
         );
 
-        for (const d of deliveries) {
-            await this.processOne(d);
+        for (const delivery of deliveries) {
+            await this.processOne(delivery);
         }
     }
 
-    private async processOne(delivery: Delivery) {
+    private async processOne(delivery: DeliveryRow): Promise<void> {
         const attempts = (delivery.attempts ?? 0) + 1;
 
         const queryRunner = this.dataSource.createQueryRunner();
@@ -67,25 +65,26 @@ export class DeliveryRetryProcessor {
                 Delivery,
                 { id: delivery.id },
                 {
-                    status: 'pending',
+                    status: 'processing',
                     attempts,
                     nextRetryAt,
                 },
             );
 
-            const outboxEvent = queryRunner.manager.create(OutboxEvent, {
-                type: 'notification.created',
+            const event = queryRunner.manager.create(OutboxEvent, {
+                type: 'delivery.retry',
                 payload: {
-                    notificationId: delivery.notificationId,
+                    deliveryId: delivery.id,
+                    isRetry: true,
                 },
             });
 
-            await queryRunner.manager.save(outboxEvent);
+            await queryRunner.manager.save(event);
 
             await queryRunner.commitTransaction();
-        } catch (e) {
+        } catch (error) {
             await queryRunner.rollbackTransaction();
-            throw e;
+            throw error;
         } finally {
             await queryRunner.release();
         }
@@ -93,7 +92,9 @@ export class DeliveryRetryProcessor {
 
     private calculateNextRetry(attempts: number): Date {
         const delays = [10, 30, 60, 300];
-        const delay = delays[Math.min(attempts - 1, delays.length - 1)];
+
+        const delay =
+            delays[Math.min(attempts - 1, delays.length - 1)];
 
         return new Date(Date.now() + delay * 1000);
     }
