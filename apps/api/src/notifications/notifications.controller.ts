@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, Patch, Param } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
@@ -20,5 +20,14 @@ export class NotificationsController {
     })
     create(@Body() dto: CreateNotificationDto) {
         return this.service.create(dto);
+    }
+
+
+    @Patch(':id/retry')
+    @ApiBearerAuth()
+    @UseGuards(JwtAuthGuard)
+    @ApiOperation({ summary: 'Retry failed deliveries for notification' })
+    async retry(@Param('id') notificationId: string) {
+        return this.service.retry(notificationId);
     }
 }
