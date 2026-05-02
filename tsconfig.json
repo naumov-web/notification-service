@@ -46,6 +46,12 @@
       "@app/database/*": [
         "libs/database/src/*"
       ],
+      "@app/metrics": [
+        "libs/metrics/src"
+      ],
+      "@app/metrics/*": [
+        "libs/metrics/src/*"
+      ],
       "@app/query": [
         "libs/query/src"
       ],

@@ -5,9 +5,10 @@ import {NotificationsModule} from "./notifications/notifications.module";
 import { AuthModule } from '@app/auth';
 import { AuthModule as AuthApiModule } from "./auth/auth.module"
 import { StatsModule } from "./stats/stats.module";
+import {MetricsModule} from "./metrics/metrics.module";
 
 @Module({
-  imports: [DatabaseModule, NotificationsModule, AuthModule, AuthApiModule, StatsModule],
+  imports: [DatabaseModule, NotificationsModule, AuthModule, AuthApiModule, StatsModule, MetricsModule ],
   controllers: [],
   providers: [ApiService],
 })
