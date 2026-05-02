@@ -1,30 +1,26 @@
-export type DeliveryStatus =
-    | 'pending'
-    | 'processing'
-    | 'sent'
-    | 'failed';
+export type DeliveryStatus = 'pending' | 'processing' | 'sent' | 'failed';
 
 export interface DeliveryRow {
-    id: string;
-    notificationId: string;
+  id: string;
+  notificationId: string;
 
-    channel: string;
-    target: string;
-    renderedBody: string;
+  channel: string;
+  target: string;
+  renderedBody: string;
 
-    status: DeliveryStatus;
+  status: DeliveryStatus;
 
-    attempts: number;
-    maxRetries: number;
+  attempts: number;
+  maxRetries: number;
 
-    nextRetryAt: Date | null;
+  nextRetryAt: Date | null;
 
-    createdAt: Date;
-    updatedAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface DeliveryStats {
-    sent: number;
-    failed: number;
-    pending: number;
+  sent: number;
+  failed: number;
+  pending: number;
 }

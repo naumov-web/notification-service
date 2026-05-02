@@ -3,11 +3,11 @@ import { MetricsService } from '@app/metrics';
 
 @Controller('metrics')
 export class MetricsController {
-    constructor(private readonly metrics: MetricsService) {}
+  constructor(private readonly metrics: MetricsService) {}
 
-    @Get()
-    @Header('Content-Type', 'text/plain')
-    async getMetrics(): Promise<string> {
-        return this.metrics.getMetrics();
-    }
+  @Get()
+  @Header('Content-Type', 'text/plain')
+  async getMetrics(): Promise<string> {
+    return this.metrics.getMetrics();
+  }
 }

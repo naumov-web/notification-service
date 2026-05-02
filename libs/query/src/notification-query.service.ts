@@ -1,138 +1,95 @@
-import {Injectable, NotFoundException} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
-import {
-    NotificationRow,
-    NotificationDetails,
-} from './types/notification.types';
-
-type RawNotificationRow = {
-    id: string;
-    userId: string;
-    eventType: string;
-    parameters: any;
-    status: string;
-    createdAt: string;
-    updatedAt: string;
-};
+import { NotificationDetails } from './types/notification.types';
 
 @Injectable()
 export class NotificationQueryService {
-    constructor(private readonly dataSource: DataSource) {}
+  constructor(private readonly dataSource: DataSource) {}
 
-    /**
-     * Получить одну notification
-     */
-    async getById(id: string): Promise<NotificationRow | null> {
-        const rows: RawNotificationRow[] = await this.dataSource.query(
-            `
-      select *
-      from notifications
-      where id = $1
-      limit 1
-      `,
-            [id],
-        );
-
-        if (!rows.length) return null;
-
-        return this.mapRow(rows[0]);
-    }
-
-    async getDetails(id: string): Promise<NotificationDetails> {
-        const notifications = await this.dataSource.query(
-            `
+  async getDetails(id: string): Promise<NotificationDetails> {
+    const notifications = await this.dataSource.query(
+      `
             select id, "userId", "eventType", status, "createdAt"
             from notifications
             where id = $1
             limit 1
             `,
-            [id],
-        );
+      [id],
+    );
 
-        if (!notifications.length) {
-            throw new NotFoundException("Notification not found.");
-        }
+    if (!notifications.length) {
+      throw new NotFoundException('Notification not found.');
+    }
 
-        const notification = notifications[0];
+    const notification = notifications[0];
 
-        // 2. deliveries
-        const deliveries = await this.dataSource.query(
-            `
+    // 2. deliveries
+    const deliveries = await this.dataSource.query(
+      `
             select id, channel, status, target, "createdAt"
             from deliveries
             where "notificationId" = $1
             order by "createdAt" asc
             `,
-            [id],
-        );
+      [id],
+    );
 
-        return {
-            notification,
-            deliveries,
-        };
+    return {
+      notification,
+      deliveries,
+    };
+  }
+
+  async list(params: {
+    limit: number;
+    offset: number;
+    userId?: string;
+    eventType?: string;
+    status?: string;
+    sortBy: 'eventType' | 'status' | 'createdAt';
+    order: 'asc' | 'desc';
+  }) {
+    const { limit, offset, userId, eventType, status, sortBy, order } = params;
+
+    const values: any[] = [];
+    const where: string[] = [];
+
+    if (userId) {
+      values.push(userId);
+      where.push(`"userId" = $${values.length}`);
     }
 
-    async list(params: {
-        limit: number;
-        offset: number;
-        userId?: string;
-        eventType?: string;
-        status?: string;
-        sortBy: 'eventType' | 'status' | 'createdAt';
-        order: 'asc' | 'desc';
-    }) {
-        const {
-            limit,
-            offset,
-            userId,
-            eventType,
-            status,
-            sortBy,
-            order,
-        } = params;
+    if (eventType) {
+      values.push(eventType);
+      where.push(`"eventType" = $${values.length}`);
+    }
 
-        const values: any[] = [];
-        const where: string[] = [];
+    if (status) {
+      values.push(status);
+      where.push(`status = $${values.length}`);
+    }
 
-        if (userId) {
-            values.push(userId);
-            where.push(`"userId" = $${values.length}`);
-        }
+    const whereSql = where.length ? `where ${where.join(' and ')}` : '';
 
-        if (eventType) {
-            values.push(eventType);
-            where.push(`"eventType" = $${values.length}`);
-        }
+    const allowedSort = ['eventType', 'status', 'createdAt'];
+    const sortColumn = allowedSort.includes(sortBy)
+      ? `"${sortBy}"`
+      : `"createdAt"`;
 
-        if (status) {
-            values.push(status);
-            where.push(`status = $${values.length}`);
-        }
-
-        const whereSql = where.length ? `where ${where.join(' and ')}` : '';
-
-        const allowedSort = ['eventType', 'status', 'createdAt'];
-        const sortColumn = allowedSort.includes(sortBy)
-            ? `"${sortBy}"`
-            : `"createdAt"`;
-
-        const sortOrder = order === 'asc' ? 'asc' : 'desc';
-        const countResult = await this.dataSource.query(
-            `
+    const sortOrder = order === 'asc' ? 'asc' : 'desc';
+    const countResult = await this.dataSource.query(
+      `
             select count(*)::int as count
             from notifications
             ${whereSql}
             `,
-            values,
-        );
-        values.push(
-            isNaN(limit) ? 20 : limit,
-            isNaN(offset) ? 0 : offset
-        );
+      values,
+    );
+    values.push(isNaN(limit) ? 20 : limit, isNaN(offset) ? 0 : offset);
 
-        const items = await this.dataSource.query(
-            `
+    const items = await this.dataSource.query(
+      `
             select id, "userId", "eventType", status, "createdAt"
             from notifications
             ${whereSql}
@@ -140,27 +97,12 @@ export class NotificationQueryService {
             limit $${values.length - 1}
             offset $${values.length}
             `,
-            values,
-        );
+      values,
+    );
 
-        return {
-            count: countResult[0].count,
-            items,
-        };
-    }
-
-    /**
-     * Маппинг raw → typed
-     */
-    private mapRow(row: RawNotificationRow): NotificationRow {
-        return {
-            id: row.id,
-            userId: row.userId,
-            eventType: row.eventType,
-            parameters: row.parameters,
-            status: row.status as NotificationRow['status'],
-            createdAt: new Date(row.createdAt),
-            updatedAt: new Date(row.updatedAt),
-        };
-    }
+    return {
+      count: countResult[0].count,
+      items,
+    };
+  }
 }

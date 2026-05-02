@@ -1,7 +1,10 @@
-import {Injectable, NotFoundException} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
-import {Notification, NotificationStatus} from '@app/database/entities/notification.entity';
+import {
+  Notification,
+  NotificationStatus,
+} from '@app/database/entities/notification.entity';
 import { Delivery } from '@app/database/entities/delivery.entity';
 import { Template } from '@app/database/entities/template.entity';
 import { OutboxEvent } from '@app/database/entities/outbox-event.entity';
@@ -10,176 +13,180 @@ import { CreateNotificationDto } from './dto/create-notification.dto';
 
 @Injectable()
 export class NotificationsService {
-    constructor(private readonly dataSource: DataSource) {}
+  constructor(private readonly dataSource: DataSource) {}
 
-    async create(dto: CreateNotificationDto) {
-        const queryRunner = this.dataSource.createQueryRunner();
+  async create(dto: CreateNotificationDto): Promise<Notification> {
+    const queryRunner = this.dataSource.createQueryRunner();
 
-        await queryRunner.connect();
-        await queryRunner.startTransaction();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
-        try {
-            const notification = queryRunner.manager.create(Notification, {
-                userId: dto.userId,
-                eventType: dto.eventType,
-                parameters: dto.parameters,
-                sendAt: dto.sendAt ? new Date(dto.sendAt) : undefined,
-            });
+    try {
+      const notification = queryRunner.manager.create(Notification, {
+        userId: dto.userId,
+        eventType: dto.eventType,
+        parameters: dto.parameters,
+        sendAt: dto.sendAt ? new Date(dto.sendAt) : undefined,
+      });
 
-            await queryRunner.manager.save(notification);
+      await queryRunner.manager.save(notification);
 
-            const deliveries: Delivery[] = [];
+      const deliveries: Delivery[] = [];
 
-            const entries = [
-                { type: 'email', value: dto.channels?.email },
-                { type: 'sms', value: dto.channels?.sms },
-                { type: 'push', value: dto.channels?.push },
-            ];
+      type ChannelType = 'email' | 'sms' | 'push';
+      const entries: { type: ChannelType; value?: string }[] = [
+        { type: 'email', value: dto.channels?.email },
+        { type: 'sms', value: dto.channels?.sms },
+        { type: 'push', value: dto.channels?.push },
+      ];
 
-            for (const entry of entries) {
-                if (!entry.value) {
-                    continue;
-                }
-
-                const template = await queryRunner.manager.findOne(Template, {
-                    where: {
-                        eventType: dto.eventType,
-                        channel: entry.type as any,
-                    },
-                    order: { version: 'DESC' },
-                });
-
-                if (!template) continue;
-
-                const delivery = queryRunner.manager.create(Delivery, {
-                    notificationId: notification.id,
-                    channel: entry.type as any,
-                    target: entry.value,
-                    status: 'pending',
-                    attempts: 0,
-                    maxRetries: dto.maxRetriesCount ?? 3,
-                    templateId: template.id,
-                    templateVersion: template.version,
-                    renderedBody: this.render(template.body, dto.parameters),
-                });
-
-                deliveries.push(delivery);
-            }
-
-            if (deliveries.length > 0) {
-                await queryRunner.manager.save(deliveries);
-            }
-
-            const outboxEvent = queryRunner.manager.create(OutboxEvent, {
-                type: 'notification.created',
-                payload: {
-                    notificationId: notification.id,
-                },
-            });
-
-            await queryRunner.manager.save(outboxEvent);
-
-            await queryRunner.commitTransaction();
-
-            return notification;
-        } catch (error) {
-            await queryRunner.rollbackTransaction();
-            throw error;
-        } finally {
-            await queryRunner.release();
+      for (const entry of entries) {
+        if (!entry.value) {
+          continue;
         }
-    }
 
-    private render(template: string, params: Record<string, any>) {
-        return template.replace(/{{\s*(\w+)\s*}}/g, (_, key) => {
-            return params?.[key] ?? '';
+        const template = await queryRunner.manager.findOne(Template, {
+          where: {
+            eventType: dto.eventType,
+            channel: entry.type,
+          },
+          order: { version: 'DESC' },
         });
-    }
 
-    async retry(notificationId: string) {
-        const queryRunner = this.dataSource.createQueryRunner();
-
-        await queryRunner.connect();
-        await queryRunner.startTransaction();
-
-        try {
-            const deliveries = await queryRunner.manager.find(Delivery, {
-                where: {
-                    notificationId,
-                    status: 'failed',
-                },
-            });
-
-            if (!deliveries.length) {
-                throw new NotFoundException('No failed deliveries for this notification');
-            }
-
-            for (const delivery of deliveries) {
-                const event = queryRunner.manager.create(OutboxEvent, {
-                    type: 'delivery.retry',
-                    payload: {
-                        deliveryId: delivery.id,
-                    },
-                });
-
-                await queryRunner.manager.save(event);
-            }
-
-            await queryRunner.commitTransaction();
-
-            return { retried: deliveries.length };
-        } catch (error) {
-            await queryRunner.rollbackTransaction();
-            throw error;
-        } finally {
-            await queryRunner.release();
+        if (!template) {
+          continue;
         }
+
+        const delivery: Delivery = queryRunner.manager.create(Delivery, {
+          notificationId: notification.id,
+          channel: entry.type,
+          target: entry.value,
+          status: 'pending',
+          attempts: 0,
+          maxRetries: dto.maxRetriesCount ?? 3,
+          templateId: template.id,
+          templateVersion: template.version,
+          renderedBody: this.render(template.body, dto.parameters),
+        });
+
+        deliveries.push(delivery);
+      }
+
+      if (deliveries.length > 0) {
+        await queryRunner.manager.save(deliveries);
+      }
+
+      const outboxEvent = queryRunner.manager.create(OutboxEvent, {
+        type: 'notification.created',
+        payload: {
+          notificationId: notification.id,
+        },
+      });
+
+      await queryRunner.manager.save(outboxEvent);
+
+      await queryRunner.commitTransaction();
+
+      return notification;
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
     }
+  }
 
-    async cancel(notificationId: string) {
-        const queryRunner = this.dataSource.createQueryRunner();
+  private render(template: string, params: Record<string, unknown>) {
+    return template.replace(/{{\s*(\w+)\s*}}/g, (_, key: string) => {
+      const value = params?.[key];
 
-        await queryRunner.connect();
-        await queryRunner.startTransaction();
+      return typeof value === 'string' || typeof value === 'number'
+        ? String(value)
+        : '';
+    });
+  }
 
-        try {
-            const notification = await queryRunner.manager.findOne(Notification, {
-                where: { id: notificationId },
-            });
+  async retry(notificationId: string) {
+    const queryRunner = this.dataSource.createQueryRunner();
 
-            if (!notification) {
-                throw new NotFoundException('Notification not found');
-            }
-            
-            await queryRunner.manager.update(
-                Notification,
-                { id: notificationId },
-                { status: NotificationStatus.CANCELLED },
-            );
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
-            await queryRunner.manager.query(
-                `
+    try {
+      const deliveries = await queryRunner.manager.find(Delivery, {
+        where: {
+          notificationId,
+          status: 'failed',
+        },
+      });
+
+      if (!deliveries.length) {
+        throw new NotFoundException(
+          'No failed deliveries for this notification',
+        );
+      }
+
+      for (const delivery of deliveries) {
+        const event = queryRunner.manager.create(OutboxEvent, {
+          type: 'delivery.retry',
+          payload: {
+            deliveryId: delivery.id,
+          },
+        });
+
+        await queryRunner.manager.save(event);
+      }
+
+      await queryRunner.commitTransaction();
+
+      return { retried: deliveries.length };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async cancel(notificationId: string) {
+    const queryRunner = this.dataSource.createQueryRunner();
+
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const notification = await queryRunner.manager.findOne(Notification, {
+        where: { id: notificationId },
+      });
+
+      if (!notification) {
+        throw new NotFoundException('Notification not found');
+      }
+
+      await queryRunner.manager.update(
+        Notification,
+        { id: notificationId },
+        { status: NotificationStatus.CANCELLED },
+      );
+
+      await queryRunner.manager.query(
+        `
                   update deliveries
                   set status = $1
                   where "notificationId" = $2
                     and status in ($3, $4)
                   `,
-                [
-                    'cancelled',
-                    notificationId,
-                    'pending',
-                    'failed',
-                ],
-            );
+        ['cancelled', notificationId, 'pending', 'failed'],
+      );
 
-            await queryRunner.commitTransaction();
+      await queryRunner.commitTransaction();
 
-            return { cancelled: true };
-        } catch (error) {
-            await queryRunner.rollbackTransaction();
-            throw error;
-        } finally {
-            await queryRunner.release();
-        }
+      return { cancelled: true };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
     }
+  }
 }

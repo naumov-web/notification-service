@@ -3,17 +3,17 @@ import { ChannelStrategy } from './channel.strategy';
 
 @Injectable()
 export class SmsStrategy implements ChannelStrategy {
-    private readonly logger = new Logger(SmsStrategy.name);
+  private readonly logger = new Logger(SmsStrategy.name);
 
-    supports(channel: string): boolean {
-        return channel === 'sms';
-    }
+  supports(channel: string): boolean {
+    return channel === 'sms';
+  }
 
-    async send(input: { target: string; content: string }): Promise<void> {
-        this.logger.log(`sending sms to ${input.target}`);
+  async send(input: { target: string; content: string }): Promise<void> {
+    this.logger.log(`sending sms to ${input.target}`);
 
-        await new Promise((r) => setTimeout(r, 300));
+    await new Promise((r) => setTimeout(r, 300));
 
-        this.logger.log(`sms sent: ${input.content}`);
-    }
+    this.logger.log(`sms sent: ${input.content}`);
+  }
 }

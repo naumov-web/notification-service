@@ -4,12 +4,12 @@ import { EventHandlerFactory } from './event-handler.factory';
 
 @Injectable()
 export class EventsConsumer extends RabbitMQConsumer {
-    constructor(private readonly factory: EventHandlerFactory) {
-        super();
-    }
+  constructor(private readonly factory: EventHandlerFactory) {
+    super();
+  }
 
-    async handleMessage(routingKey: string, payload: any) {
-        const handler = this.factory.getHandler(routingKey);
-        await handler.handle(payload);
-    }
+  async handleMessage(routingKey: string, payload: any) {
+    const handler = this.factory.getHandler(routingKey);
+    await handler.handle(payload);
+  }
 }
