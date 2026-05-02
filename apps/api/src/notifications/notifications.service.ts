@@ -135,4 +135,51 @@ export class NotificationsService {
             await queryRunner.release();
         }
     }
+
+    async cancel(notificationId: string) {
+        const queryRunner = this.dataSource.createQueryRunner();
+
+        await queryRunner.connect();
+        await queryRunner.startTransaction();
+
+        try {
+            const notification = await queryRunner.manager.findOne(Notification, {
+                where: { id: notificationId },
+            });
+
+            if (!notification) {
+                throw new NotFoundException('Notification not found');
+            }
+            
+            await queryRunner.manager.update(
+                Notification,
+                { id: notificationId },
+                { status: 'cancelled' },
+            );
+
+            await queryRunner.manager.query(
+                `
+                  update deliveries
+                  set status = $1
+                  where "notificationId" = $2
+                    and status in ($3, $4)
+                  `,
+                [
+                    'cancelled',
+                    notificationId,
+                    'pending',
+                    'failed',
+                ],
+            );
+
+            await queryRunner.commitTransaction();
+
+            return { cancelled: true };
+        } catch (error) {
+            await queryRunner.rollbackTransaction();
+            throw error;
+        } finally {
+            await queryRunner.release();
+        }
+    }
 }
