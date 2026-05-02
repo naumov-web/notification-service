@@ -8,7 +8,7 @@ import { Template } from '@app/database/entities/template.entity';
 import { NotificationsService } from './notifications.service';
 import { NotificationsController } from './notifications.controller';
 import { OutboxEvent } from "@app/database/entities/outbox-event.entity";
-import {QueryModule} from "@app/query";
+import { QueryModule } from "@app/query";
 
 @Module({
     imports: [

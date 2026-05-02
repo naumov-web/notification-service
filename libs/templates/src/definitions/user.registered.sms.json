@@ -1,0 +1,14 @@
+{
+  "eventType": "user.registered",
+  "channel": "sms",
+  "subject": "Welcome!",
+  "body": "Hello, {{name}}",
+  "parametersSchema": {
+    "type": "object",
+    "required": ["name"],
+    "properties": {
+      "name": { "type": "string" }
+    }
+  },
+  "version": 1
+}
