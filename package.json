@@ -28,6 +28,7 @@
     "create:admin": "ts-node -r tsconfig-paths/register scripts/create-admin.ts"
   },
   "dependencies": {
+    "@clickhouse/client": "^1.18.3",
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
     "@nestjs/jwt": "^11.0.2",
@@ -95,6 +96,7 @@
       "<rootDir>/libs/"
     ],
     "moduleNameMapper": {
+      "^@app/analytics(|/.*)$": "<rootDir>/libs/analytics/src/$1",
       "^@app/auth(|/.*)$": "<rootDir>/libs/auth/src/$1",
       "^@app/common(|/.*)$": "<rootDir>/libs/common/src/$1",
       "^@app/database(|/.*)$": "<rootDir>/libs/database/src/$1",

@@ -10,9 +10,10 @@ import { ChannelStrategyFactory } from './channel-strategy.factory';
 import { EmailStrategy } from './strategies/email.strategy';
 import { SmsStrategy } from './strategies/sms.strategy';
 import { PushStrategy } from './strategies/push.strategy';
+import { OutboxEvent } from "@app/database/entities/outbox-event.entity";
 
 @Module({
-    imports: [TypeOrmModule.forFeature([Delivery, Notification])],
+    imports: [TypeOrmModule.forFeature([Delivery, Notification, OutboxEvent])],
     providers: [
         DeliveryProcessor,
         ChannelStrategyFactory,

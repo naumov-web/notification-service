@@ -10,6 +10,15 @@
   "monorepo": true,
   "root": "apps/notification-service",
   "projects": {
+    "analytics": {
+      "type": "library",
+      "root": "libs/analytics",
+      "entryFile": "index",
+      "sourceRoot": "libs/analytics/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/analytics/tsconfig.lib.json"
+      }
+    },
     "api": {
       "type": "application",
       "root": "apps/api",

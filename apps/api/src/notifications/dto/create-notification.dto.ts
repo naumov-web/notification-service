@@ -26,7 +26,7 @@ class ChannelsDto {
     })
     @IsOptional()
     @IsString()
-    phone?: string;
+    sms?: string;
 
     @ApiPropertyOptional({
         description: 'Push device token',
@@ -34,7 +34,7 @@ class ChannelsDto {
     })
     @IsOptional()
     @IsString()
-    deviceToken?: string;
+    push?: string;
 }
 
 export class CreateNotificationDto {

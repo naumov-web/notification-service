@@ -32,8 +32,8 @@ export class NotificationsService {
 
             const entries = [
                 { type: 'email', value: dto.channels?.email },
-                { type: 'sms', value: dto.channels?.phone },
-                { type: 'push', value: dto.channels?.deviceToken },
+                { type: 'sms', value: dto.channels?.sms },
+                { type: 'push', value: dto.channels?.push },
             ];
 
             for (const entry of entries) {

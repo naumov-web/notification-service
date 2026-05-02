@@ -1,11 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { DataSource } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 
 import { Delivery } from '@app/database/entities/delivery.entity';
 import { ChannelStrategyFactory } from './channel-strategy.factory';
 import {Notification} from "@app/database/entities/notification.entity";
+import {OutboxEvent} from "@app/database/entities/outbox-event.entity";
 
 @Injectable()
 export class DeliveryProcessor {
@@ -36,9 +36,16 @@ export class DeliveryProcessor {
                 'pending'
             ]
         );
+        const notification = await this.repoNotification.findOne({
+            where: { id: notificationId },
+        });
+
+        if (!notification) {
+            return;
+        }
 
         for (const delivery of deliveries) {
-            await this.processOne(delivery);
+            await this.processOne(notification, delivery);
         }
 
         await this.updateNotificationStatus(notificationId);
@@ -57,11 +64,25 @@ export class DeliveryProcessor {
             return;
         }
 
-        await this.processOne(delivery);
+        const notification = await this.repoNotification.findOne({
+            where: { id: delivery.notificationId },
+        });
+
+        if (!notification) {
+            return;
+        }
+
+        await this.processOne(notification, delivery);
     }
 
-    private async processOne(delivery: Delivery) {
+    private async processOne(notification: Notification, delivery: Delivery) {
+        const queryRunner = this.dataSource.createQueryRunner();
+        await queryRunner.connect();
+        await queryRunner.startTransaction();
+        let status: string = 'sent';
+
         try {
+
             const strategy = this.factory.get(delivery.channel);
 
             await strategy.send({
@@ -78,6 +99,25 @@ export class DeliveryProcessor {
             delivery.attempts += 1;
 
             await this.repo.save(delivery);
+            status = 'failed';
+        } finally {
+            const analyticsEvent = queryRunner.manager.create(OutboxEvent, {
+                type: 'analytics.event',
+                payload: {
+                    eventTime: new Date(),
+                    notificationId: delivery.notificationId,
+                    deliveryId: delivery.id,
+                    userId: notification.userId,
+                    eventType: notification.eventType,
+                    channel: delivery.channel,
+                    status,
+                    isRetry: delivery.attempts > 0,
+                },
+            });
+
+            await queryRunner.manager.save(analyticsEvent);
+            await queryRunner.commitTransaction();
+            await queryRunner.release();
         }
     }
 
