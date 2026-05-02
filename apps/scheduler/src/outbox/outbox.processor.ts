@@ -30,18 +30,29 @@ export class OutboxProcessor {
 
     private async lockBatch(limit: number): Promise<[OutboxEvent[], number]> {
         return this.dataSource.query(
-            `update outbox_events
+            `
+                update outbox_events oe
                 set status = $1
-                where id in (
-                    select id
-                    from outbox_events
-                    where status in ($2, $3)
-                      and ("nextRetryAt" is null or "nextRetryAt" <= now())
-                    order by "createdAt" asc
-                    for update skip locked
-                    limit $4
-                )
-            returning *;
+                    from (
+                        select id
+                        from outbox_events oe_inner
+                        where oe_inner.status in ($2, $3)
+                            and (oe_inner."nextRetryAt" is null or oe_inner."nextRetryAt" <= now())
+                            and (
+                                oe_inner.type <> 'notification.created'
+                                or exists (
+                                    select 1
+                                    from notifications n
+                                    where n.id = (oe_inner.payload->>'notificationId')::uuid
+                                        and (n."sendAt" is null or n."sendAt" <= now())
+                                )
+                            )
+                        order by oe_inner."createdAt" asc
+                        for update skip locked
+                        limit $4
+                    ) sub
+                where oe.id = sub.id
+                returning oe.*;
             `,
             [
                 OutboxStatus.PROCESSING,
