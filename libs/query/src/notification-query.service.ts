@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import {Injectable, NotFoundException} from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
 import {
@@ -39,45 +39,37 @@ export class NotificationQueryService {
         return this.mapRow(rows[0]);
     }
 
-    /**
-     * Полная информация (notification + deliveries + stats)
-     */
-    async getDetails(id: string): Promise<NotificationDetails | null> {
-        const notification = await this.getById(id);
-
-        if (!notification) return null;
-
-        const deliveries = await this.dataSource.query(
+    async getDetails(id: string): Promise<NotificationDetails> {
+        const notifications = await this.dataSource.query(
             `
-      select id, channel, status, target
-      from deliveries
-      where "notificationId" = $1
-      `,
+            select id, "userId", "eventType", status, "createdAt"
+            from notifications
+            where id = $1
+            limit 1
+            `,
             [id],
         );
 
-        const statsResult = await this.dataSource.query(
+        if (!notifications.length) {
+            throw new NotFoundException("Notification not found.");
+        }
+
+        const notification = notifications[0];
+
+        // 2. deliveries
+        const deliveries = await this.dataSource.query(
             `
-      select
-        count(*) as total,
-        count(*) filter (where status = 'sent') as sent,
-        count(*) filter (where status = 'failed') as failed,
-        count(*) filter (where status = 'pending') as pending
-      from deliveries
-      where "notificationId" = $1
-      `,
+            select id, channel, status, target, "createdAt"
+            from deliveries
+            where "notificationId" = $1
+            order by "createdAt" asc
+            `,
             [id],
         );
 
         return {
             notification,
             deliveries,
-            stats: {
-                total: Number(statsResult[0].total),
-                sent: Number(statsResult[0].sent),
-                failed: Number(statsResult[0].failed),
-                pending: Number(statsResult[0].pending),
-            },
         };
     }
 

@@ -1,7 +1,7 @@
 import {Injectable, NotFoundException} from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
-import { Notification } from '@app/database/entities/notification.entity';
+import {Notification, NotificationStatus} from '@app/database/entities/notification.entity';
 import { Delivery } from '@app/database/entities/delivery.entity';
 import { Template } from '@app/database/entities/template.entity';
 import { OutboxEvent } from '@app/database/entities/outbox-event.entity';
@@ -154,7 +154,7 @@ export class NotificationsService {
             await queryRunner.manager.update(
                 Notification,
                 { id: notificationId },
-                { status: 'cancelled' },
+                { status: NotificationStatus.CANCELLED },
             );
 
             await queryRunner.manager.query(

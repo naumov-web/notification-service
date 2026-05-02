@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Patch, Delete, Query, Param } from '@nestjs/common';
+import {Body, Controller, Get, Post, Patch, Delete, Query, Param, NotFoundException} from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { ListNotificationsDto } from './dto/list-notifications.dto';
@@ -108,5 +108,20 @@ export class NotificationsController {
     })
     async cancel(@Param('id') notificationId: string) {
         return this.service.cancel(notificationId);
+    }
+
+    @Get(':id')
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Get notification details' })
+    @ApiResponse({
+        status: 200,
+        description: 'Notification details',
+    })
+    @ApiResponse({
+        status: 404,
+        description: 'Notification not found',
+    })
+    async getOne(@Param('id') id: string) {
+        return await this.queryService.getDetails(id);
     }
 }
