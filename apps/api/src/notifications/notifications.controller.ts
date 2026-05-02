@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Patch, Param } from '@nestjs/common';
+import { Body, Controller, Post, Patch, Delete, Param } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
@@ -27,7 +27,46 @@ export class NotificationsController {
     @ApiBearerAuth()
     @UseGuards(JwtAuthGuard)
     @ApiOperation({ summary: 'Retry failed deliveries for notification' })
+    @ApiResponse({
+        status: 200,
+        description: 'Retry events created',
+        schema: {
+            example: {
+                retried: 2,
+            },
+        },
+    })
+    @ApiResponse({
+        status: 404,
+        description: 'No failed deliveries for this notification',
+        schema: {
+            example: {
+                statusCode: 404,
+                message: 'No failed deliveries for this notification',
+            },
+        },
+    })
     async retry(@Param('id') notificationId: string) {
         return this.service.retry(notificationId);
+    }
+
+    @Delete(':id/cancel')
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Cancel notification delivery' })
+    @ApiResponse({
+        status: 200,
+        description: 'Notification cancelled',
+        schema: {
+            example: {
+                cancelled: true,
+            },
+        },
+    })
+    @ApiResponse({
+        status: 404,
+        description: 'Notification not found',
+    })
+    async cancel(@Param('id') notificationId: string) {
+        return this.service.cancel(notificationId);
     }
 }
