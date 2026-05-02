@@ -81,21 +81,80 @@ export class NotificationQueryService {
         };
     }
 
-    /**
-     * Список notifications (например для API)
-     */
-    async list(limit = 20, offset = 0): Promise<NotificationRow[]> {
-        const rows: RawNotificationRow[] = await this.dataSource.query(
+    async list(params: {
+        limit: number;
+        offset: number;
+        userId?: string;
+        eventType?: string;
+        status?: string;
+        sortBy: 'eventType' | 'status' | 'createdAt';
+        order: 'asc' | 'desc';
+    }) {
+        const {
+            limit,
+            offset,
+            userId,
+            eventType,
+            status,
+            sortBy,
+            order,
+        } = params;
+
+        const values: any[] = [];
+        const where: string[] = [];
+
+        if (userId) {
+            values.push(userId);
+            where.push(`"userId" = $${values.length}`);
+        }
+
+        if (eventType) {
+            values.push(eventType);
+            where.push(`"eventType" = $${values.length}`);
+        }
+
+        if (status) {
+            values.push(status);
+            where.push(`status = $${values.length}`);
+        }
+
+        const whereSql = where.length ? `where ${where.join(' and ')}` : '';
+
+        const allowedSort = ['eventType', 'status', 'createdAt'];
+        const sortColumn = allowedSort.includes(sortBy)
+            ? `"${sortBy}"`
+            : `"createdAt"`;
+
+        const sortOrder = order === 'asc' ? 'asc' : 'desc';
+        const countResult = await this.dataSource.query(
             `
-      select *
-      from notifications
-      order by "createdAt" desc
-      limit $1 offset $2
-      `,
-            [limit, offset],
+            select count(*)::int as count
+            from notifications
+            ${whereSql}
+            `,
+            values,
+        );
+        values.push(
+            isNaN(limit) ? 20 : limit,
+            isNaN(offset) ? 0 : offset
         );
 
-        return rows.map((r) => this.mapRow(r));
+        const items = await this.dataSource.query(
+            `
+            select id, "userId", "eventType", status, "createdAt"
+            from notifications
+            ${whereSql}
+            order by ${sortColumn} ${sortOrder}
+            limit $${values.length - 1}
+            offset $${values.length}
+            `,
+            values,
+        );
+
+        return {
+            count: countResult[0].count,
+            items,
+        };
     }
 
     /**

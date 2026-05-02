@@ -1,14 +1,19 @@
-import { Body, Controller, Post, Patch, Delete, Param } from '@nestjs/common';
+import { Body, Controller, Get, Post, Patch, Delete, Query, Param } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
+import { ListNotificationsDto } from './dto/list-notifications.dto';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '@app/auth';
+import {NotificationQueryService} from "@app/query/notification-query.service";
 
 @ApiTags('notifications')
 @Controller('notifications')
 export class NotificationsController {
-    constructor(private readonly service: NotificationsService) {}
+    constructor(
+        private readonly service: NotificationsService,
+        private readonly queryService: NotificationQueryService,
+    ) {}
 
     @Post()
     @ApiBearerAuth()
@@ -20,6 +25,41 @@ export class NotificationsController {
     })
     create(@Body() dto: CreateNotificationDto) {
         return this.service.create(dto);
+    }
+
+    @ApiBearerAuth()
+    @Get()
+    @ApiOperation({ summary: 'Get notifications list' })
+    @ApiResponse({
+        status: 200,
+        description: 'List of notifications',
+        schema: {
+            example: {
+                count: 100,
+                items: [
+                    {
+                        id: 'uuid',
+                        userId: 'uuid',
+                        eventType: 'user.registered',
+                        status: 'sent',
+                        createdAt: '2026-05-01T10:00:00Z',
+                    },
+                ],
+            },
+        },
+    })
+    async list(
+        @Query() query: ListNotificationsDto
+    ) {
+        return this.queryService.list({
+            limit: Number(query.limit),
+            offset: Number(query.offset),
+            userId: query.userId,
+            eventType: query.eventType,
+            status: query.status,
+            sortBy: query.sortBy,
+            order: query.order,
+        });
     }
 
 
