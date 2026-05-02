@@ -6,6 +6,7 @@ import { Delivery } from '@app/database/entities/delivery.entity';
 import { ChannelStrategyFactory } from './channel-strategy.factory';
 import {Notification} from "@app/database/entities/notification.entity";
 import {OutboxEvent} from "@app/database/entities/outbox-event.entity";
+import {MetricsService} from "@app/metrics";
 
 @Injectable()
 export class DeliveryProcessor {
@@ -18,6 +19,7 @@ export class DeliveryProcessor {
         private readonly repoNotification: Repository<Notification>,
         private readonly factory: ChannelStrategyFactory,
         private readonly dataSource: DataSource,
+        private readonly metrics: MetricsService
     ) {}
 
     async process(notificationId: string) {
@@ -80,9 +82,16 @@ export class DeliveryProcessor {
         await queryRunner.connect();
         await queryRunner.startTransaction();
         let status: string = 'sent';
+        this.metrics.deliveriesTotal.inc({
+            channel: delivery.channel,
+        });
+        if (delivery.attempts > 0) {
+            this.metrics.retriesTotal.inc({
+                channel: delivery.channel,
+            });
+        }
 
         try {
-
             const strategy = this.factory.get(delivery.channel);
 
             await strategy.send({
@@ -92,6 +101,9 @@ export class DeliveryProcessor {
 
             delivery.status = 'sent';
             await this.repo.save(delivery);
+            this.metrics.deliveriesSent.inc({
+                channel: delivery.channel,
+            });
         } catch (err) {
             this.logger.error(`delivery failed ${delivery.id}`, err);
 
@@ -100,6 +112,9 @@ export class DeliveryProcessor {
 
             await this.repo.save(delivery);
             status = 'failed';
+            this.metrics.deliveriesFailed.inc({
+                channel: delivery.channel,
+            });
         } finally {
             const analyticsEvent = queryRunner.manager.create(OutboxEvent, {
                 type: 'analytics.event',
