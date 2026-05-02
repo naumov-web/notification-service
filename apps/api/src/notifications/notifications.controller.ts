@@ -6,6 +6,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '@app/auth';
 import {NotificationQueryService} from "@app/query/notification-query.service";
+import {ListNotificationsResponseDto} from "./dto/list-notifications-response.dto";
 
 @ApiTags('notifications')
 @Controller('notifications')
@@ -33,20 +34,7 @@ export class NotificationsController {
     @ApiResponse({
         status: 200,
         description: 'List of notifications',
-        schema: {
-            example: {
-                count: 100,
-                items: [
-                    {
-                        id: 'uuid',
-                        userId: 'uuid',
-                        eventType: 'user.registered',
-                        status: 'sent',
-                        createdAt: '2026-05-01T10:00:00Z',
-                    },
-                ],
-            },
-        },
+        type: ListNotificationsResponseDto,
     })
     async list(
         @Query() query: ListNotificationsDto
