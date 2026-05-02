@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import {Injectable, NotFoundException} from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
 import { Notification } from '@app/database/entities/notification.entity';
@@ -94,5 +94,45 @@ export class NotificationsService {
         return template.replace(/{{\s*(\w+)\s*}}/g, (_, key) => {
             return params?.[key] ?? '';
         });
+    }
+
+    async retry(notificationId: string) {
+        const queryRunner = this.dataSource.createQueryRunner();
+
+        await queryRunner.connect();
+        await queryRunner.startTransaction();
+
+        try {
+            const deliveries = await queryRunner.manager.find(Delivery, {
+                where: {
+                    notificationId,
+                    status: 'failed',
+                },
+            });
+
+            if (!deliveries.length) {
+                throw new NotFoundException('No failed deliveries for this notification');
+            }
+
+            for (const delivery of deliveries) {
+                const event = queryRunner.manager.create(OutboxEvent, {
+                    type: 'delivery.retry',
+                    payload: {
+                        deliveryId: delivery.id,
+                    },
+                });
+
+                await queryRunner.manager.save(event);
+            }
+
+            await queryRunner.commitTransaction();
+
+            return { retried: deliveries.length };
+        } catch (error) {
+            await queryRunner.rollbackTransaction();
+            throw error;
+        } finally {
+            await queryRunner.release();
+        }
     }
 }
