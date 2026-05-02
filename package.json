@@ -31,6 +31,7 @@
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/schedule": "^6.1.3",
+    "@nestjs/swagger": "^11.4.2",
     "@nestjs/typeorm": "^11.0.1",
     "amqplib": "^1.0.3",
     "class-transformer": "^0.5.1",
@@ -38,6 +39,7 @@
     "pg": "^8.20.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "swagger-ui-express": "^5.0.1",
     "typeorm": "^0.3.28",
     "typeorm-ts-node-commonjs": "^0.3.20"
   },
@@ -91,6 +93,7 @@
       "^@app/database(|/.*)$": "<rootDir>/libs/database/src/$1",
       "^@app/query(|/.*)$": "<rootDir>/libs/query/src/$1",
       "^@app/queue(|/.*)$": "<rootDir>/libs/queue/src/$1",
+      "^@app/swagger(|/.*)$": "<rootDir>/libs/swagger/src/$1",
       "^@app/templates(|/.*)$": "<rootDir>/libs/templates/src/$1"
     }
   }

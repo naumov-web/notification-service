@@ -46,6 +46,12 @@
       "@app/queue/*": [
         "libs/queue/src/*"
       ],
+      "@app/swagger": [
+        "libs/swagger/src"
+      ],
+      "@app/swagger/*": [
+        "libs/swagger/src/*"
+      ],
       "@app/templates": [
         "libs/templates/src"
       ],
