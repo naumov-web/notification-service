@@ -6,6 +6,7 @@ export function setupSwagger(app: INestApplication) {
         .setTitle('Notification Service')
         .setDescription('API for sending notifications')
         .setVersion('1.0')
+        .addBearerAuth()
         .addTag('notifications')
         .build();
 

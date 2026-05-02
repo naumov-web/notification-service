@@ -55,7 +55,7 @@ export class CreateNotificationDto {
 
     @ApiProperty({
         description: 'Notification event type',
-        example: 'user.signup',
+        example: 'user.registered',
     })
     @IsString()
     eventType: string;

@@ -37,7 +37,9 @@ export class NotificationsService {
             ];
 
             for (const entry of entries) {
-                if (!entry.value) continue;
+                if (!entry.value) {
+                    continue;
+                }
 
                 const template = await queryRunner.manager.findOne(Template, {
                     where: {

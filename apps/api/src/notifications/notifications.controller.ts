@@ -1,7 +1,9 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '@app/auth';
 
 @ApiTags('notifications')
 @Controller('notifications')
@@ -9,6 +11,8 @@ export class NotificationsController {
     constructor(private readonly service: NotificationsService) {}
 
     @Post()
+    @ApiBearerAuth()
+    @UseGuards(JwtAuthGuard)
     @ApiOperation({ summary: 'Create notification' })
     @ApiResponse({
         status: 201,
