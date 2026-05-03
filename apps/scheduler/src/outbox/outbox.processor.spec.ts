@@ -1,122 +1,144 @@
 import { OutboxProcessor } from './outbox.processor';
 import { DataSource } from 'typeorm';
-import { RabbitMQService } from '@app/queue/rabbitmq.service';
-import { OutboxStatus } from '@app/database/entities/outbox-event.entity';
 import { Logger } from '@nestjs/common';
+import { RabbitMQService } from '@app/queue/rabbitmq.service';
+import {
+  OutboxEvent,
+  OutboxStatus,
+} from '@app/database/entities/outbox-event.entity';
+
+type OutboxProcessorPrivate = {
+  processEvent: (event: OutboxEvent) => Promise<void>;
+  calculateNextRetry: (attempts: number) => Date;
+  lockBatch: (limit: number) => Promise<[OutboxEvent[], number]>;
+};
+
+type DataSourceMock = Pick<DataSource, 'query'>;
+type RabbitMock = Pick<RabbitMQService, 'publish'>;
 
 beforeAll(() => {
-    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
-    jest.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
+  jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
 });
 
 describe('OutboxProcessor', () => {
-    let processor: OutboxProcessor;
+  let processor: OutboxProcessor;
+  let processorPrivate: OutboxProcessorPrivate;
 
-    const dataSourceMock = {
-        query: jest.fn(),
-    } as unknown as DataSource;
+  let dataSourceMock: jest.Mocked<DataSourceMock>;
+  let rabbitMock: jest.Mocked<RabbitMock>;
 
-    const rabbitMock = {
-        publish: jest.fn(),
-    } as unknown as RabbitMQService;
+  const createEvent = (overrides?: Partial<OutboxEvent>): OutboxEvent => ({
+    id: 'event-1',
+    type: 'test.event',
+    payload: { foo: 'bar' },
+    attempts: 0,
+    status: OutboxStatus.PENDING,
+    createdAt: new Date(),
+    ...overrides,
+  });
 
-    beforeEach(() => {
-        jest.clearAllMocks();
-        processor = new OutboxProcessor(dataSourceMock, rabbitMock);
-    });
+  beforeEach(() => {
+    dataSourceMock = {
+      query: jest.fn(),
+    };
 
-    const baseEvent = {
-        id: 'event-1',
-        type: 'test.event',
-        payload: { foo: 'bar' },
-        attempts: 0,
-    } as any;
+    rabbitMock = {
+      publish: jest.fn(),
+    };
 
-    // 🟢 SUCCESS CASE
-    it('should publish and mark as processed', async () => {
-        rabbitMock.publish = jest.fn().mockResolvedValue(undefined);
-        dataSourceMock.query = jest.fn().mockResolvedValue(undefined);
+    processor = new OutboxProcessor(
+      dataSourceMock as unknown as DataSource,
+      rabbitMock as unknown as RabbitMQService,
+    );
 
-        await (processor as any).processEvent(baseEvent);
+    processorPrivate = processor as unknown as OutboxProcessorPrivate;
 
-        expect(rabbitMock.publish).toHaveBeenCalledWith(
-            baseEvent.type,
-            baseEvent.payload,
-        );
+    jest.clearAllMocks();
+  });
 
-        expect(dataSourceMock.query).toHaveBeenCalledWith(
-            expect.stringContaining('set status = $1'),
-            [OutboxStatus.PROCESSED, baseEvent.id],
-        );
-    });
+  // 🟢 SUCCESS
+  it('should publish and mark as processed', async () => {
+    rabbitMock.publish.mockResolvedValue(undefined);
+    dataSourceMock.query.mockResolvedValue(undefined);
 
-    // 🔴 PUBLISH FAIL → RETRY
-    it('should retry on publish failure', async () => {
-        rabbitMock.publish = jest.fn().mockRejectedValue(new Error('fail'));
+    const event = createEvent();
 
-        dataSourceMock.query = jest.fn().mockResolvedValue(undefined);
+    await processorPrivate.processEvent(event);
 
-        await (processor as any).processEvent({
-            ...baseEvent,
-            attempts: 1,
-        });
+    expect(rabbitMock.publish).toHaveBeenCalledTimes(1);
+    expect(rabbitMock.publish).toHaveBeenCalledWith(event.type, event.payload);
 
-        expect(rabbitMock.publish).toHaveBeenCalled();
+    expect(dataSourceMock.query).toHaveBeenCalledWith(
+      expect.stringContaining('set status = $1'),
+      [OutboxStatus.PROCESSED, event.id],
+    );
+  });
 
-        expect(dataSourceMock.query).toHaveBeenCalledWith(
-            expect.stringContaining('"nextRetryAt"'),
-            expect.arrayContaining([OutboxStatus.PENDING]),
-        );
-    });
+  // 🔴 RETRY
+  it('should retry on publish failure', async () => {
+    rabbitMock.publish.mockRejectedValue(new Error('fail'));
+    dataSourceMock.query.mockResolvedValue(undefined);
 
-    // 🔴 MAX RETRIES → FAILED
-    it('should mark as FAILED when max retries exceeded', async () => {
-        rabbitMock.publish = jest.fn().mockRejectedValue(new Error('fail'));
+    const event = createEvent({ attempts: 1 });
 
-        dataSourceMock.query = jest.fn().mockResolvedValue(undefined);
+    await processorPrivate.processEvent(event);
 
-        await (processor as any).processEvent({
-            ...baseEvent,
-            attempts: 5,
-        });
+    expect(rabbitMock.publish).toHaveBeenCalledTimes(1);
 
-        expect(dataSourceMock.query).toHaveBeenCalledWith(
-            expect.stringContaining('set status = $1'),
-            [OutboxStatus.FAILED, 6, baseEvent.id],
-        );
-    });
+    expect(dataSourceMock.query).toHaveBeenCalledWith(
+      expect.stringContaining('"nextRetryAt"'),
+      expect.arrayContaining([OutboxStatus.PENDING]),
+    );
+  });
 
-    // 🧮 calculateNextRetry
-    it('should calculate correct retry delay', () => {
-        const now = Date.now();
-        jest.spyOn(Date, 'now').mockReturnValue(now);
+  // 🔴 MAX RETRIES
+  it('should mark as FAILED when max retries exceeded', async () => {
+    rabbitMock.publish.mockRejectedValue(new Error('fail'));
+    dataSourceMock.query.mockResolvedValue(undefined);
 
-        const retry = (processor as any).calculateNextRetry(1);
-        expect(retry.getTime()).toBe(now + 10_000);
+    const event = createEvent({ attempts: 5 });
 
-        const retry2 = (processor as any).calculateNextRetry(2);
-        expect(retry2.getTime()).toBe(now + 60_000);
+    await processorPrivate.processEvent(event);
 
-        const retry3 = (processor as any).calculateNextRetry(3);
-        expect(retry3.getTime()).toBe(now + 300_000);
+    expect(dataSourceMock.query).toHaveBeenCalledWith(
+      expect.stringContaining('set status = $1'),
+      [OutboxStatus.FAILED, 6, event.id],
+    );
+  });
 
-        const retry4 = (processor as any).calculateNextRetry(10);
-        expect(retry4.getTime()).toBe(now + 900_000);
-    });
+  // 🧮 RETRY DELAYS
+  it('should calculate retry delays correctly', () => {
+    const now = Date.now();
+    jest.spyOn(Date, 'now').mockReturnValue(now);
 
-    // 🟡 processBatch
-    it('should process all events from batch', async () => {
-        const events = [
-            { ...baseEvent, id: '1' },
-            { ...baseEvent, id: '2' },
-        ];
+    const r1 = processorPrivate.calculateNextRetry(1);
+    expect(r1.getTime()).toBe(now + 10_000);
 
-        jest.spyOn(processor as any, 'lockBatch').mockResolvedValue([events, 2]);
+    const r2 = processorPrivate.calculateNextRetry(2);
+    expect(r2.getTime()).toBe(now + 60_000);
 
-        const spy = jest.spyOn(processor as any, 'processEvent').mockResolvedValue(undefined);
+    const r3 = processorPrivate.calculateNextRetry(3);
+    expect(r3.getTime()).toBe(now + 300_000);
 
-        await processor.processBatch();
+    const r4 = processorPrivate.calculateNextRetry(10);
+    expect(r4.getTime()).toBe(now + 900_000);
+  });
 
-        expect(spy).toHaveBeenCalledTimes(2);
-    });
+  // 🟡 BATCH
+  it('should process all events from batch', async () => {
+    const events: OutboxEvent[] = [
+      createEvent({ id: '1' }),
+      createEvent({ id: '2' }),
+    ];
+
+    jest.spyOn(processorPrivate, 'lockBatch').mockResolvedValue([events, 2]);
+
+    const processSpy = jest
+      .spyOn(processorPrivate, 'processEvent')
+      .mockResolvedValue(undefined);
+
+    await processor.processBatch();
+
+    expect(processSpy).toHaveBeenCalledTimes(2);
+  });
 });
