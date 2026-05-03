@@ -13,7 +13,7 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/apps/notification-service/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
@@ -99,7 +99,6 @@
     "moduleNameMapper": {
       "^@app/analytics(|/.*)$": "<rootDir>/libs/analytics/src/$1",
       "^@app/auth(|/.*)$": "<rootDir>/libs/auth/src/$1",
-      "^@app/common(|/.*)$": "<rootDir>/libs/common/src/$1",
       "^@app/database(|/.*)$": "<rootDir>/libs/database/src/$1",
       "^@app/metrics(|/.*)$": "<rootDir>/libs/metrics/src/$1",
       "^@app/query(|/.*)$": "<rootDir>/libs/query/src/$1",

@@ -1,14 +1,19 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
-import { NotificationDetails } from './types/notification.types';
+import {
+  NotificationDetails,
+  NotificationRow,
+  DeliveryRow,
+  CountRow,
+} from './types/notification.types';
 
 @Injectable()
 export class NotificationQueryService {
   constructor(private readonly dataSource: DataSource) {}
 
   async getDetails(id: string): Promise<NotificationDetails> {
-    const notifications = await this.dataSource.query(
+    const result = (await this.dataSource.query(
       `
             select id, "userId", "eventType", status, "createdAt"
             from notifications
@@ -16,16 +21,15 @@ export class NotificationQueryService {
             limit 1
             `,
       [id],
-    );
+    )) as unknown;
+    const notifications = result as NotificationRow[];
 
     if (!notifications.length) {
       throw new NotFoundException('Notification not found.');
     }
 
     const notification = notifications[0];
-
-    // 2. deliveries
-    const deliveries = await this.dataSource.query(
+    const deliveryResult = (await this.dataSource.query(
       `
             select id, channel, status, target, "createdAt"
             from deliveries
@@ -33,7 +37,8 @@ export class NotificationQueryService {
             order by "createdAt" asc
             `,
       [id],
-    );
+    )) as unknown;
+    const deliveries = deliveryResult as DeliveryRow[];
 
     return {
       notification,
@@ -51,8 +56,7 @@ export class NotificationQueryService {
     order: 'asc' | 'desc';
   }) {
     const { limit, offset, userId, eventType, status, sortBy, order } = params;
-
-    const values: any[] = [];
+    const values: unknown[] = [];
     const where: string[] = [];
 
     if (userId) {
@@ -72,36 +76,44 @@ export class NotificationQueryService {
 
     const whereSql = where.length ? `where ${where.join(' and ')}` : '';
 
-    const allowedSort = ['eventType', 'status', 'createdAt'];
+    const allowedSort: Array<'eventType' | 'status' | 'createdAt'> = [
+      'eventType',
+      'status',
+      'createdAt',
+    ];
+
     const sortColumn = allowedSort.includes(sortBy)
       ? `"${sortBy}"`
       : `"createdAt"`;
 
     const sortOrder = order === 'asc' ? 'asc' : 'desc';
-    const countResult = await this.dataSource.query(
+    const countRaw = (await this.dataSource.query(
       `
-            select count(*)::int as count
-            from notifications
-            ${whereSql}
-            `,
+      select count(*)::int as count
+      from notifications
+      ${whereSql}
+    `,
       values,
-    );
-    values.push(isNaN(limit) ? 20 : limit, isNaN(offset) ? 0 : offset);
+    )) as unknown;
 
-    const items = await this.dataSource.query(
+    const countRows = countRaw as CountRow[];
+    values.push(isNaN(limit) ? 20 : limit, isNaN(offset) ? 0 : offset);
+    const itemsRaw = (await this.dataSource.query(
       `
-            select id, "userId", "eventType", status, "createdAt"
-            from notifications
-            ${whereSql}
-            order by ${sortColumn} ${sortOrder}
-            limit $${values.length - 1}
-            offset $${values.length}
-            `,
+        select id, "userId", "eventType", status, "createdAt"
+        from notifications
+        ${whereSql}
+        order by ${sortColumn} ${sortOrder}
+        limit $${values.length - 1}
+        offset $${values.length}
+      `,
       values,
-    );
+    )) as unknown;
+
+    const items = itemsRaw as NotificationRow[];
 
     return {
-      count: countResult[0].count,
+      count: countRows[0]?.count ?? 0,
       items,
     };
   }

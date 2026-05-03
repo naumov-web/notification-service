@@ -4,48 +4,92 @@ import {
   OnModuleDestroy,
   Logger,
 } from '@nestjs/common';
+
+// runtime import (ESM-safe)
 import * as amqp from 'amqplib';
+
+type ChannelLike = {
+  assertExchange: (
+    exchange: string,
+    type: string,
+    options: unknown,
+  ) => Promise<unknown>;
+  assertQueue: (queue: string, options: unknown) => Promise<unknown>;
+  bindQueue: (
+    queue: string,
+    exchange: string,
+    routingKey: string,
+  ) => Promise<unknown>;
+  prefetch: (count: number) => Promise<unknown>;
+  consume: (
+    queue: string,
+    onMessage: (msg: unknown) => Promise<void>,
+    options?: unknown,
+  ) => Promise<unknown>;
+  ack: (msg: unknown) => void;
+  nack: (msg: unknown, allUpTo?: boolean, requeue?: boolean) => void;
+  close: () => Promise<void>;
+};
+
+type ConnectionLike = {
+  createChannel: () => Promise<unknown>;
+  close: () => Promise<void>;
+};
 
 @Injectable()
 export class RabbitMQConsumer implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RabbitMQConsumer.name);
 
-  private connection: amqp.Connection;
-  private channel: amqp.Channel;
+  private connection!: unknown;
+  private channel!: unknown;
 
-  async onModuleInit() {
-    this.connection = await amqp.connect(process.env.RABBITMQ_URL!);
-    this.channel = await this.connection.createChannel();
+  async onModuleInit(): Promise<void> {
+    const amqpTyped = amqp as unknown as {
+      connect: (url: string) => Promise<ConnectionLike>;
+    };
 
-    await this.channel.assertExchange('events', 'topic', {
+    // connection
+    this.connection = await amqpTyped.connect(process.env.RABBITMQ_URL!);
+
+    const connection = this.connection as ConnectionLike;
+
+    // channel
+    const rawChannel = await connection.createChannel();
+    this.channel = rawChannel;
+
+    const channel = this.channel as ChannelLike;
+
+    await channel.assertExchange('events', 'topic', {
       durable: true,
     });
 
-    await this.channel.assertQueue('notification.events', {
+    await channel.assertQueue('notification.events', {
       durable: true,
     });
 
-    await this.channel.bindQueue('notification.events', 'events', '#');
+    await channel.bindQueue('notification.events', 'events', '#');
 
-    await this.channel.prefetch(10);
+    await channel.prefetch(10);
 
-    await this.channel.consume(
+    await channel.consume(
       'notification.events',
-      async (msg) => {
-        if (!msg) {
-          return;
-        }
+      async (msgRaw: unknown) => {
+        if (!msgRaw) return;
+
+        const msg = msgRaw as {
+          content: Buffer;
+          fields: { routingKey: string };
+        };
 
         try {
-          const content = JSON.parse(msg.content.toString());
+          const payload = JSON.parse(msg.content.toString()) as unknown;
 
-          await this.handleMessage(msg.fields.routingKey, content);
+          await this.handleMessage(msg.fields.routingKey, payload);
 
-          this.channel.ack(msg);
+          channel.ack(msgRaw);
         } catch (err) {
-          this.logger.error('consumer error', err);
-
-          this.channel.nack(msg, false, false);
+          this.logger.error('consumer error', err as Error);
+          channel.nack(msgRaw, false, false);
         }
       },
       { noAck: false },
@@ -54,10 +98,18 @@ export class RabbitMQConsumer implements OnModuleInit, OnModuleDestroy {
     this.logger.log('consumer started');
   }
 
-  async onModuleDestroy() {
-    await this.channel?.close();
-    await this.connection?.close();
+  async onModuleDestroy(): Promise<void> {
+    const channel = this.channel as ChannelLike | undefined;
+    const connection = this.connection as ConnectionLike | undefined;
+
+    await channel?.close();
+    await connection?.close();
   }
 
-  async handleMessage(routingKey: string, payload: any) {}
+  handleMessage(_routingKey: string, _payload: unknown): Promise<void> {
+    void _routingKey;
+    void _payload;
+
+    return Promise.resolve();
+  }
 }

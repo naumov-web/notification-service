@@ -23,17 +23,18 @@ export class DeliveryProcessor {
   ) {}
 
   async process(notificationId: string) {
-    const [deliveries] = await this.dataSource.query(
+    const raw = (await this.dataSource.query(
       `
-                update deliveries 
-                set status = $1
-                where
-                    "notificationId" = $2
-                    and status = $3
-                returning *;
-            `,
+        update deliveries 
+        set status = $1
+        where
+          "notificationId" = $2
+          and status = $3
+        returning *;
+      `,
       ['processing', notificationId, 'pending'],
-    );
+    )) as unknown;
+    const [deliveries] = raw as [Delivery[], number];
     const notification = await this.repoNotification.findOne({
       where: { id: notificationId },
     });

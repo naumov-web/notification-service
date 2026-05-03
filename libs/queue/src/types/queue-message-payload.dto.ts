@@ -1,1 +1,1 @@
-export interface QueueMessagePayload {}
+export type QueueMessagePayload = Record<string, any>;

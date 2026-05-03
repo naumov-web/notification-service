@@ -1,19 +1,31 @@
 import { Injectable, Inject } from '@nestjs/common';
+import { ClickHouseClient } from '@clickhouse/client';
 import { CLICKHOUSE_CLIENT } from 'libs/analytics/src';
 import { EventHandlerStrategy } from './event-handler.interface';
+
+type AnalyticsEvent = {
+  eventTime: string | Date;
+  notificationId: string;
+  deliveryId: string;
+  userId: string;
+  eventType: string;
+  channel: 'email' | 'sms' | 'push';
+  status: 'sent' | 'failed';
+  isRetry: boolean;
+};
 
 @Injectable()
 export class AnalyticsEventHandler implements EventHandlerStrategy {
   constructor(
     @Inject(CLICKHOUSE_CLIENT)
-    private readonly client: any,
+    private readonly client: ClickHouseClient,
   ) {}
 
   supports(eventType: string): boolean {
     return eventType === 'analytics.event';
   }
 
-  async handle(payload: any) {
+  async handle(payload: AnalyticsEvent) {
     await this.client.insert({
       table: 'analytics_events',
       values: [

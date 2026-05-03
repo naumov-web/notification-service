@@ -3,6 +3,6 @@ import { SchedulerModule } from './scheduler.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(SchedulerModule);
-  app.init();
+  await app.init();
 }
 bootstrap();

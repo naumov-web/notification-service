@@ -18,13 +18,18 @@ export interface NotificationRow {
   updatedAt: Date;
 }
 
+export interface DeliveryRow {
+  id: string;
+  channel: string;
+  status: string;
+  target: string;
+}
+
+export interface CountRow {
+  count: number;
+}
+
 export interface NotificationDetails {
   notification: NotificationRow;
-
-  deliveries: {
-    id: string;
-    channel: string;
-    status: string;
-    target: string;
-  }[];
+  deliveries: DeliveryRow[];
 }

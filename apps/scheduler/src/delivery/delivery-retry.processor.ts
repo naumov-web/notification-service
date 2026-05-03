@@ -13,7 +13,7 @@ export class DeliveryRetryProcessor {
   constructor(private readonly dataSource: DataSource) {}
 
   async processBatch(): Promise<void> {
-    const [deliveries] = await this.dataSource.query(
+    const raw = (await this.dataSource.query(
       `
                 update deliveries set status = 'processing'
                 where id in (
@@ -28,8 +28,8 @@ export class DeliveryRetryProcessor {
                 returning *;
             `,
       ['failed', this.batchSize],
-    );
-
+    )) as unknown;
+    const [deliveries] = raw as [DeliveryRow[], number];
     for (const delivery of deliveries) {
       await this.processOne(delivery);
     }
