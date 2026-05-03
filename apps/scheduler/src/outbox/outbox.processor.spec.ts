@@ -23,7 +23,6 @@ beforeAll(() => {
 describe('OutboxProcessor', () => {
   let processor: OutboxProcessor;
   let processorPrivate: OutboxProcessorPrivate;
-
   let dataSourceMock: jest.Mocked<DataSourceMock>;
   let rabbitMock: jest.Mocked<RabbitMock>;
 
@@ -56,7 +55,6 @@ describe('OutboxProcessor', () => {
     jest.clearAllMocks();
   });
 
-  // 🟢 SUCCESS
   it('should publish and mark as processed', async () => {
     rabbitMock.publish.mockResolvedValue(undefined);
     dataSourceMock.query.mockResolvedValue(undefined);
@@ -74,39 +72,29 @@ describe('OutboxProcessor', () => {
     );
   });
 
-  // 🔴 RETRY
   it('should retry on publish failure', async () => {
     rabbitMock.publish.mockRejectedValue(new Error('fail'));
     dataSourceMock.query.mockResolvedValue(undefined);
-
     const event = createEvent({ attempts: 1 });
-
     await processorPrivate.processEvent(event);
-
     expect(rabbitMock.publish).toHaveBeenCalledTimes(1);
-
     expect(dataSourceMock.query).toHaveBeenCalledWith(
       expect.stringContaining('"nextRetryAt"'),
       expect.arrayContaining([OutboxStatus.PENDING]),
     );
   });
 
-  // 🔴 MAX RETRIES
   it('should mark as FAILED when max retries exceeded', async () => {
     rabbitMock.publish.mockRejectedValue(new Error('fail'));
     dataSourceMock.query.mockResolvedValue(undefined);
-
     const event = createEvent({ attempts: 5 });
-
     await processorPrivate.processEvent(event);
-
     expect(dataSourceMock.query).toHaveBeenCalledWith(
       expect.stringContaining('set status = $1'),
       [OutboxStatus.FAILED, 6, event.id],
     );
   });
 
-  // 🧮 RETRY DELAYS
   it('should calculate retry delays correctly', () => {
     const now = Date.now();
     jest.spyOn(Date, 'now').mockReturnValue(now);
@@ -124,21 +112,16 @@ describe('OutboxProcessor', () => {
     expect(r4.getTime()).toBe(now + 900_000);
   });
 
-  // 🟡 BATCH
   it('should process all events from batch', async () => {
     const events: OutboxEvent[] = [
       createEvent({ id: '1' }),
       createEvent({ id: '2' }),
     ];
-
     jest.spyOn(processorPrivate, 'lockBatch').mockResolvedValue([events, 2]);
-
     const processSpy = jest
       .spyOn(processorPrivate, 'processEvent')
       .mockResolvedValue(undefined);
-
     await processor.processBatch();
-
     expect(processSpy).toHaveBeenCalledTimes(2);
   });
 });

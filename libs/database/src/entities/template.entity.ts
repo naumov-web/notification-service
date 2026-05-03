@@ -20,7 +20,7 @@ export class Template {
     default: TemplateChannel.EMAIL,
   })
   @Index()
-  channel: 'email' | 'sms' | 'push';
+  channel: TemplateChannel;
 
   @Column({ nullable: true })
   subject?: string;

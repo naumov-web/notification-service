@@ -11,6 +11,7 @@ export enum NotificationStatus {
   PROCESSING = 'processing',
   DONE = 'done',
   CANCELLED = 'cancelled',
+  FAILED = 'failed',
 }
 
 @Entity('notifications')

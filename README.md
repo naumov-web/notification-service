@@ -152,3 +152,7 @@ This project is designed to demonstrate backend architecture patterns:
 - Event-driven processing
 - Scalability
 - Fault tolerance
+
+## API Docs
+
+Open the link http://127.0.0.1:3000/docs to see the documentation of the API

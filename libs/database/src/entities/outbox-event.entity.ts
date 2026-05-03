@@ -13,6 +13,12 @@ export enum OutboxStatus {
   FAILED = 'failed',
 }
 
+export enum OutboxType {
+  NOTIFICATION_CREATED = 'notification.created',
+  DELIVERY_RETRY = 'delivery.retry',
+  ANALYTICS_EVENT = 'analytics.event',
+}
+
 @Entity('outbox_events')
 export class OutboxEvent {
   @PrimaryGeneratedColumn('uuid')
