@@ -5,9 +5,19 @@ import {
   Notification,
   NotificationStatus,
 } from '@app/database/entities/notification.entity';
-import { Delivery } from '@app/database/entities/delivery.entity';
-import { Template } from '@app/database/entities/template.entity';
-import { OutboxEvent } from '@app/database/entities/outbox-event.entity';
+import {
+  Delivery,
+  DeliveryChannel,
+  DeliveryStatusEnum,
+} from '@app/database/entities/delivery.entity';
+import {
+  Template,
+  TemplateChannel,
+} from '@app/database/entities/template.entity';
+import {
+  OutboxEvent,
+  OutboxType,
+} from '@app/database/entities/outbox-event.entity';
 
 import { CreateNotificationDto } from './dto/create-notification.dto';
 
@@ -33,11 +43,10 @@ export class NotificationsService {
 
       const deliveries: Delivery[] = [];
 
-      type ChannelType = 'email' | 'sms' | 'push';
-      const entries: { type: ChannelType; value?: string }[] = [
-        { type: 'email', value: dto.channels?.email },
-        { type: 'sms', value: dto.channels?.sms },
-        { type: 'push', value: dto.channels?.push },
+      const entries: { type: DeliveryChannel; value?: string }[] = [
+        { type: DeliveryChannel.EMAIL, value: dto.channels?.email },
+        { type: DeliveryChannel.SMS, value: dto.channels?.sms },
+        { type: DeliveryChannel.PUSH, value: dto.channels?.push },
       ];
 
       for (const entry of entries) {
@@ -48,7 +57,7 @@ export class NotificationsService {
         const template = await queryRunner.manager.findOne(Template, {
           where: {
             eventType: dto.eventType,
-            channel: entry.type,
+            channel: entry.type as unknown as TemplateChannel,
           },
           order: { version: 'DESC' },
         });
@@ -61,7 +70,7 @@ export class NotificationsService {
           notificationId: notification.id,
           channel: entry.type,
           target: entry.value,
-          status: 'pending',
+          status: DeliveryStatusEnum.PENDING,
           attempts: 0,
           maxRetries: dto.maxRetriesCount ?? 3,
           templateId: template.id,
@@ -77,7 +86,7 @@ export class NotificationsService {
       }
 
       const outboxEvent = queryRunner.manager.create(OutboxEvent, {
-        type: 'notification.created',
+        type: OutboxType.NOTIFICATION_CREATED,
         payload: {
           notificationId: notification.id,
         },
@@ -116,7 +125,7 @@ export class NotificationsService {
       const deliveries = await queryRunner.manager.find(Delivery, {
         where: {
           notificationId,
-          status: 'failed',
+          status: DeliveryStatusEnum.FAILED,
         },
       });
 
@@ -128,7 +137,7 @@ export class NotificationsService {
 
       for (const delivery of deliveries) {
         const event = queryRunner.manager.create(OutboxEvent, {
-          type: 'delivery.retry',
+          type: OutboxType.DELIVERY_RETRY,
           payload: {
             deliveryId: delivery.id,
           },
@@ -176,7 +185,12 @@ export class NotificationsService {
                   where "notificationId" = $2
                     and status in ($3, $4)
                   `,
-        ['cancelled', notificationId, 'pending', 'failed'],
+        [
+          DeliveryStatusEnum.CANCELLED,
+          notificationId,
+          DeliveryStatusEnum.PENDING,
+          DeliveryStatusEnum.FAILED,
+        ],
       );
 
       await queryRunner.commitTransaction();

@@ -2,11 +2,20 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 
-import { Delivery } from '@app/database/entities/delivery.entity';
-import { ChannelStrategyFactory } from './channel-strategy.factory';
-import { Notification } from '@app/database/entities/notification.entity';
-import { OutboxEvent } from '@app/database/entities/outbox-event.entity';
+import {
+  Delivery,
+  DeliveryStatusEnum,
+} from '@app/database/entities/delivery.entity';
+import {
+  Notification,
+  NotificationStatus,
+} from '@app/database/entities/notification.entity';
+import {
+  OutboxEvent,
+  OutboxType,
+} from '@app/database/entities/outbox-event.entity';
 import { MetricsService } from '@app/metrics';
+import { ChannelStrategyFactory } from './channel-strategy.factory';
 
 @Injectable()
 export class DeliveryProcessor {
@@ -32,7 +41,11 @@ export class DeliveryProcessor {
           and status = $3
         returning *;
       `,
-      ['processing', notificationId, 'pending'],
+      [
+        NotificationStatus.PROCESSING,
+        notificationId,
+        NotificationStatus.PENDING,
+      ],
     )) as unknown;
     const [deliveries] = raw as [Delivery[], number];
     const notification = await this.repoNotification.findOne({
@@ -51,7 +64,7 @@ export class DeliveryProcessor {
   }
 
   async processOneById(deliveryId: string) {
-    const delivery = await this.repo.findOne({
+    const delivery: Delivery | null = await this.repo.findOne({
       where: { id: deliveryId },
     });
 
@@ -59,7 +72,7 @@ export class DeliveryProcessor {
       return;
     }
 
-    if (delivery.status === 'sent') {
+    if (delivery.status.toString() === DeliveryStatusEnum.SENT.toString()) {
       return;
     }
 
@@ -96,7 +109,7 @@ export class DeliveryProcessor {
         content: delivery.renderedBody,
       });
 
-      delivery.status = 'sent';
+      delivery.status = DeliveryStatusEnum.SENT;
       await this.repo.save(delivery);
       this.metrics.deliveriesSent.inc({
         channel: delivery.channel,
@@ -104,7 +117,7 @@ export class DeliveryProcessor {
     } catch (err) {
       this.logger.error(`delivery failed ${delivery.id}`, err);
 
-      delivery.status = 'failed';
+      delivery.status = DeliveryStatusEnum.FAILED;
       delivery.attempts += 1;
 
       await this.repo.save(delivery);
@@ -114,7 +127,7 @@ export class DeliveryProcessor {
       });
     } finally {
       const analyticsEvent = queryRunner.manager.create(OutboxEvent, {
-        type: 'analytics.event',
+        type: OutboxType.ANALYTICS_EVENT,
         payload: {
           eventTime: new Date(),
           notificationId: delivery.notificationId,
@@ -135,27 +148,31 @@ export class DeliveryProcessor {
 
   private async updateNotificationStatus(notificationId: string) {
     await this.repoNotification.query(
-      `update notifications n
-             set status = case
-                              when not exists (
-                                  select 1
-                                  from deliveries d
-                                  where d."notificationId" = n.id
-                                    and d.status != $2
-                              ) then $3::notifications_status_enum
-
-                              when exists (
-                                  select 1
-                                  from deliveries d
-                                  where d."notificationId" = n.id
-                                    and d.status = $4
-                              ) then $5::notifications_status_enum
-
-                              else $6::notifications_status_enum
-                 end
-             where n.id = $1
-            `,
-      [notificationId, 'sent', 'done', 'failed', 'failed', 'processing'],
+      `
+          update notifications n
+          set status = case
+                           when agg.all_sent then $2::notifications_status_enum
+                           when agg.all_failed then $3::notifications_status_enum
+                           else $4
+                       end
+          from (
+              select d."notificationId",
+                     bool_and(d.status = $5)   as all_sent,
+                     bool_and(d.status = $6) as all_failed
+              from deliveries d
+              where d."notificationId" = $1
+              group by d."notificationId"
+          ) agg
+          where n.id = agg."notificationId";
+        `,
+      [
+        notificationId,
+        NotificationStatus.DONE,
+        NotificationStatus.FAILED,
+        NotificationStatus.PROCESSING,
+        DeliveryStatusEnum.SENT,
+        DeliveryStatusEnum.FAILED,
+      ],
     );
   }
 }

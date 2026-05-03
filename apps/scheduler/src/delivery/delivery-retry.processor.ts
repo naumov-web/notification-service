@@ -1,8 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
-import { Delivery } from '@app/database/entities/delivery.entity';
-import { OutboxEvent } from '@app/database/entities/outbox-event.entity';
+import {
+  Delivery,
+  DeliveryStatusEnum,
+} from '@app/database/entities/delivery.entity';
+import {
+  OutboxEvent,
+  OutboxType,
+} from '@app/database/entities/outbox-event.entity';
 
 import { DeliveryRow } from '@app/query/types/delivery.types';
 
@@ -15,19 +21,23 @@ export class DeliveryRetryProcessor {
   async processBatch(): Promise<void> {
     const raw = (await this.dataSource.query(
       `
-                update deliveries set status = 'processing'
+                update deliveries set status = $1
                 where id in (
                     select id
                     from deliveries
-                    where status = $1
+                    where status = $2
                       and ("attempts" < "maxRetries")
                       and ("nextRetryAt" is null or "nextRetryAt" <= now())
                     order by "createdAt" asc
-                            limit $2
+                            limit $3
                 )
                 returning *;
             `,
-      ['failed', this.batchSize],
+      [
+        DeliveryStatusEnum.PROCESSING,
+        DeliveryStatusEnum.FAILED,
+        this.batchSize,
+      ],
     )) as unknown;
     const [deliveries] = raw as [DeliveryRow[], number];
     for (const delivery of deliveries) {
@@ -48,37 +58,33 @@ export class DeliveryRetryProcessor {
           Delivery,
           { id: delivery.id },
           {
-            status: 'failed',
+            status: DeliveryStatusEnum.FAILED,
             attempts,
           },
         );
-
         await queryRunner.commitTransaction();
+
         return;
       }
 
       const nextRetryAt = this.calculateNextRetry(attempts);
-
       await queryRunner.manager.update(
         Delivery,
         { id: delivery.id },
         {
-          status: 'processing',
+          status: DeliveryStatusEnum.PROCESSING,
           attempts,
           nextRetryAt,
         },
       );
-
       const event = queryRunner.manager.create(OutboxEvent, {
-        type: 'delivery.retry',
+        type: OutboxType.DELIVERY_RETRY,
         payload: {
           deliveryId: delivery.id,
           isRetry: true,
         },
       });
-
       await queryRunner.manager.save(event);
-
       await queryRunner.commitTransaction();
     } catch (error) {
       await queryRunner.rollbackTransaction();
@@ -90,7 +96,6 @@ export class DeliveryRetryProcessor {
 
   private calculateNextRetry(attempts: number): Date {
     const delays = [10, 30, 60, 300];
-
     const delay = delays[Math.min(attempts - 1, delays.length - 1)];
 
     return new Date(Date.now() + delay * 1000);

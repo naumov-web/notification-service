@@ -1,8 +1,5 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-
-// runtime import
 import * as amqp from 'amqplib';
-
 import { QueueMessagePayload } from '@app/queue/types/queue-message-payload.dto';
 
 type ChannelLike = {
@@ -29,22 +26,20 @@ type ConnectionLike = {
 export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
   private connection!: unknown;
   private channel!: unknown;
+  private exchangeName: string = 'events';
+  private exchangeType: string = 'topic';
 
   async onModuleInit(): Promise<void> {
     const amqpTyped = amqp as unknown as {
       connect: (url: string) => Promise<ConnectionLike>;
     };
-
-    // connection
     this.connection = await amqpTyped.connect(process.env.RABBITMQ_URL!);
     const connection = this.connection as ConnectionLike;
-
-    // channel
     const rawChannel = await connection.createChannel();
     this.channel = rawChannel;
     const channel = this.channel as ChannelLike;
 
-    await channel.assertExchange('events', 'topic', {
+    await channel.assertExchange(this.exchangeName, this.exchangeType, {
       durable: true,
     });
   }
@@ -55,7 +50,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
   ): Promise<void> {
     const channel = this.channel as ChannelLike;
     const buffer = Buffer.from(JSON.stringify(payload));
-    channel.publish('events', routingKey, buffer, {
+    channel.publish(this.exchangeName, routingKey, buffer, {
       persistent: true,
     });
 

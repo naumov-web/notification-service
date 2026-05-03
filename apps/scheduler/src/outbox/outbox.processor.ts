@@ -106,7 +106,8 @@ export class OutboxProcessor {
     const nextRetryAt = this.calculateNextRetry(attempts);
 
     await this.dataSource.query(
-      `update outbox_events
+      `
+            update outbox_events
                 set status = $1,
                     attempts = $2,
                     "nextRetryAt" = $3
@@ -118,7 +119,6 @@ export class OutboxProcessor {
 
   private calculateNextRetry(attempts: number): Date {
     const delays = [10, 60, 300, 900];
-
     const delay = delays[Math.min(attempts - 1, delays.length - 1)];
 
     return new Date(Date.now() + delay * 1000);

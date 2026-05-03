@@ -26,7 +26,6 @@ describe('StatsService', () => {
     return call[0].query;
   };
 
-  // 🟢 базовый сценарий
   it('should build query with date range', async () => {
     clientMock.query.mockReturnValue({
       json: () => Promise.resolve([]),
@@ -44,7 +43,6 @@ describe('StatsService', () => {
     expect(query).toContain("event_time <= '2026-05-03'");
   });
 
-  // 🟡 фильтры
   it('should include eventType and channel filters', async () => {
     clientMock.query.mockReturnValue({
       json: () => Promise.resolve([]),
@@ -64,7 +62,6 @@ describe('StatsService', () => {
     expect(query).toContain("channel = 'email'");
   });
 
-  // 🔵 groupBy hour
   it('should use hourly grouping', async () => {
     clientMock.query.mockReturnValue({
       json: () => Promise.resolve([]),
@@ -81,7 +78,6 @@ describe('StatsService', () => {
     expect(query).toContain('toStartOfHour(event_time)');
   });
 
-  // 🔵 groupBy day
   it('should use daily grouping', async () => {
     clientMock.query.mockReturnValue({
       json: () => Promise.resolve([]),
@@ -98,7 +94,6 @@ describe('StatsService', () => {
     expect(query).toContain('toDate(event_time)');
   });
 
-  // 🧮 mapping результата
   it('should map result correctly', async () => {
     const data: StatsItemDto[] = [
       {

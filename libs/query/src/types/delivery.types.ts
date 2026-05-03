@@ -18,9 +18,3 @@ export interface DeliveryRow {
   createdAt: Date;
   updatedAt: Date;
 }
-
-export interface DeliveryStats {
-  sent: number;
-  failed: number;
-  pending: number;
-}

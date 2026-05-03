@@ -4,8 +4,6 @@ import {
   OnModuleDestroy,
   Logger,
 } from '@nestjs/common';
-
-// runtime import (ESM-safe)
 import * as amqp from 'amqplib';
 
 type ChannelLike = {
@@ -39,42 +37,38 @@ type ConnectionLike = {
 @Injectable()
 export class RabbitMQConsumer implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RabbitMQConsumer.name);
-
   private connection!: unknown;
   private channel!: unknown;
+  private queueName: string = 'notification.events';
+  private exchangeName: string = 'events';
+  private exchangeType: string = 'topic';
+  private prefetchCount: number = 10;
 
   async onModuleInit(): Promise<void> {
     const amqpTyped = amqp as unknown as {
       connect: (url: string) => Promise<ConnectionLike>;
     };
-
-    // connection
     this.connection = await amqpTyped.connect(process.env.RABBITMQ_URL!);
-
     const connection = this.connection as ConnectionLike;
-
-    // channel
     const rawChannel = await connection.createChannel();
     this.channel = rawChannel;
-
     const channel = this.channel as ChannelLike;
-
-    await channel.assertExchange('events', 'topic', {
+    await channel.assertExchange(this.exchangeName, this.exchangeType, {
       durable: true,
     });
 
-    await channel.assertQueue('notification.events', {
+    await channel.assertQueue(this.queueName, {
       durable: true,
     });
 
-    await channel.bindQueue('notification.events', 'events', '#');
-
-    await channel.prefetch(10);
-
+    await channel.bindQueue(this.queueName, this.exchangeName, '#');
+    await channel.prefetch(this.prefetchCount);
     await channel.consume(
-      'notification.events',
+      this.queueName,
       async (msgRaw: unknown) => {
-        if (!msgRaw) return;
+        if (!msgRaw) {
+          return;
+        }
 
         const msg = msgRaw as {
           content: Buffer;
@@ -83,9 +77,7 @@ export class RabbitMQConsumer implements OnModuleInit, OnModuleDestroy {
 
         try {
           const payload = JSON.parse(msg.content.toString()) as unknown;
-
           await this.handleMessage(msg.fields.routingKey, payload);
-
           channel.ack(msgRaw);
         } catch (err) {
           this.logger.error('consumer error', err as Error);
@@ -101,7 +93,6 @@ export class RabbitMQConsumer implements OnModuleInit, OnModuleDestroy {
   async onModuleDestroy(): Promise<void> {
     const channel = this.channel as ChannelLike | undefined;
     const connection = this.connection as ConnectionLike | undefined;
-
     await channel?.close();
     await connection?.close();
   }

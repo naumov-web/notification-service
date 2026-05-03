@@ -8,7 +8,7 @@ export const ClickHouseProvider: Provider = {
   useFactory: () => {
     return createClient({
       url: process.env.CLICKHOUSE_URL || 'http://clickhouse:8123',
-      database: 'analytics',
+      database: process.env.CLICKHOUSE_DATABASE || 'analytics',
     });
   },
 };

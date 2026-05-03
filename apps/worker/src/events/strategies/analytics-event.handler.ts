@@ -2,6 +2,8 @@ import { Injectable, Inject } from '@nestjs/common';
 import { ClickHouseClient } from '@clickhouse/client';
 import { CLICKHOUSE_CLIENT } from 'libs/analytics/src';
 import { EventHandlerStrategy } from './event-handler.interface';
+import { DeliveryChannel } from '@app/database/entities/delivery.entity';
+import { OutboxType } from '@app/database/entities/outbox-event.entity';
 
 type AnalyticsEvent = {
   eventTime: string | Date;
@@ -9,7 +11,7 @@ type AnalyticsEvent = {
   deliveryId: string;
   userId: string;
   eventType: string;
-  channel: 'email' | 'sms' | 'push';
+  channel: DeliveryChannel;
   status: 'sent' | 'failed';
   isRetry: boolean;
 };
@@ -22,7 +24,7 @@ export class AnalyticsEventHandler implements EventHandlerStrategy {
   ) {}
 
   supports(eventType: string): boolean {
-    return eventType === 'analytics.event';
+    return eventType === OutboxType.ANALYTICS_EVENT.toString();
   }
 
   async handle(payload: AnalyticsEvent) {
@@ -47,6 +49,6 @@ export class AnalyticsEventHandler implements EventHandlerStrategy {
   private formatDate(date: string | Date): string {
     const d = new Date(date);
 
-    return d.toISOString().replace('T', ' ').replace('Z', '').split('.')[0]; // убираем миллисекунды
+    return d.toISOString().replace('T', ' ').replace('Z', '').split('.')[0];
   }
 }
