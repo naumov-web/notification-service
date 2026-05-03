@@ -1,43 +1,43 @@
 import { Injectable, Inject } from '@nestjs/common';
+import { ClickHouseClient } from '@clickhouse/client';
 import { CLICKHOUSE_CLIENT } from '@app/analytics';
+import { StatsItemDto, StatsResponseDto } from './dto/stats-response.dto';
 
 @Injectable()
 export class StatsService {
-    constructor(
-        @Inject(CLICKHOUSE_CLIENT)
-        private readonly client: any,
-    ) {}
+  constructor(
+    @Inject(CLICKHOUSE_CLIENT)
+    private readonly client: ClickHouseClient,
+  ) {}
 
-    async getStats(params: {
-        from: string;
-        to: string;
-        groupBy: 'day' | 'hour';
-        eventType?: string;
-        channel?: string;
-    }) {
-        const { from, to, groupBy, eventType, channel } = params;
+  async getStats(params: {
+    from: string;
+    to: string;
+    groupBy: 'day' | 'hour';
+    eventType?: string;
+    channel?: string;
+  }): Promise<StatsResponseDto> {
+    const { from, to, groupBy, eventType, channel } = params;
 
-        const groupExpr =
-            groupBy === 'hour'
-                ? 'toStartOfHour(event_time)'
-                : 'toDate(event_time)';
+    const groupExpr =
+      groupBy === 'hour' ? 'toStartOfHour(event_time)' : 'toDate(event_time)';
 
-        const conditions: string[] = [
-            `event_time >= '${from}'`,
-            `event_time <= '${to}'`,
-        ];
+    const conditions: string[] = [
+      `event_time >= '${from}'`,
+      `event_time <= '${to}'`,
+    ];
 
-        if (eventType) {
-            conditions.push(`event_type = '${eventType}'`);
-        }
+    if (eventType) {
+      conditions.push(`event_type = '${eventType}'`);
+    }
 
-        if (channel) {
-            conditions.push(`channel = '${channel}'`);
-        }
+    if (channel) {
+      conditions.push(`channel = '${channel}'`);
+    }
 
-        const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
-        const query = `
+    const query = `
       SELECT
         ${groupExpr} AS bucket,
         count() AS total,
@@ -50,13 +50,14 @@ export class StatsService {
       ORDER BY bucket ASC
     `;
 
-        const result = await this.client.query({
-            query,
-            format: 'JSONEachRow',
-        });
+    const result = await this.client.query({
+      query,
+      format: 'JSONEachRow',
+    });
+    const data = await result.json<StatsItemDto>();
 
-        const data = await result.json();
-
-        return data;
-    }
+    return {
+      items: data,
+    };
+  }
 }

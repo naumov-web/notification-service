@@ -6,13 +6,7 @@ import { NotificationQueryService } from './notification-query.service';
 
 @Module({
   imports: [DatabaseModule],
-  providers: [
-    DeliveryQueryService,
-    NotificationQueryService,
-  ],
-  exports: [
-    DeliveryQueryService,
-    NotificationQueryService,
-  ],
+  providers: [DeliveryQueryService, NotificationQueryService],
+  exports: [DeliveryQueryService, NotificationQueryService],
 })
 export class QueryModule {}

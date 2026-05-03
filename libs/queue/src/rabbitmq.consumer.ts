@@ -1,62 +1,115 @@
-import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  OnModuleInit,
+  OnModuleDestroy,
+  Logger,
+} from '@nestjs/common';
+
+// runtime import (ESM-safe)
 import * as amqp from 'amqplib';
+
+type ChannelLike = {
+  assertExchange: (
+    exchange: string,
+    type: string,
+    options: unknown,
+  ) => Promise<unknown>;
+  assertQueue: (queue: string, options: unknown) => Promise<unknown>;
+  bindQueue: (
+    queue: string,
+    exchange: string,
+    routingKey: string,
+  ) => Promise<unknown>;
+  prefetch: (count: number) => Promise<unknown>;
+  consume: (
+    queue: string,
+    onMessage: (msg: unknown) => Promise<void>,
+    options?: unknown,
+  ) => Promise<unknown>;
+  ack: (msg: unknown) => void;
+  nack: (msg: unknown, allUpTo?: boolean, requeue?: boolean) => void;
+  close: () => Promise<void>;
+};
+
+type ConnectionLike = {
+  createChannel: () => Promise<unknown>;
+  close: () => Promise<void>;
+};
 
 @Injectable()
 export class RabbitMQConsumer implements OnModuleInit, OnModuleDestroy {
-    private readonly logger = new Logger(RabbitMQConsumer.name);
+  private readonly logger = new Logger(RabbitMQConsumer.name);
 
-    private connection: amqp.Connection;
-    private channel: amqp.Channel;
+  private connection!: unknown;
+  private channel!: unknown;
 
-    async onModuleInit() {
-        this.connection = await amqp.connect(process.env.RABBITMQ_URL!);
-        this.channel = await this.connection.createChannel();
+  async onModuleInit(): Promise<void> {
+    const amqpTyped = amqp as unknown as {
+      connect: (url: string) => Promise<ConnectionLike>;
+    };
 
-        await this.channel.assertExchange('events', 'topic', {
-            durable: true,
-        });
+    // connection
+    this.connection = await amqpTyped.connect(process.env.RABBITMQ_URL!);
 
-        await this.channel.assertQueue('notification.events', {
-            durable: true,
-        });
+    const connection = this.connection as ConnectionLike;
 
-        await this.channel.bindQueue(
-            'notification.events',
-            'events',
-            '#',
-        );
+    // channel
+    const rawChannel = await connection.createChannel();
+    this.channel = rawChannel;
 
-        await this.channel.prefetch(10);
+    const channel = this.channel as ChannelLike;
 
-        await this.channel.consume(
-            'notification.events',
-            async (msg) => {
-                if (!msg) return;
+    await channel.assertExchange('events', 'topic', {
+      durable: true,
+    });
 
-                try {
-                    const content = JSON.parse(msg.content.toString());
+    await channel.assertQueue('notification.events', {
+      durable: true,
+    });
 
-                    await this.handleMessage(msg.fields.routingKey, content);
+    await channel.bindQueue('notification.events', 'events', '#');
 
-                    this.channel.ack(msg);
-                } catch (err) {
-                    this.logger.error('consumer error', err);
+    await channel.prefetch(10);
 
-                    this.channel.nack(msg, false, false);
-                }
-            },
-            { noAck: false },
-        );
+    await channel.consume(
+      'notification.events',
+      async (msgRaw: unknown) => {
+        if (!msgRaw) return;
 
-        this.logger.log('consumer started');
-    }
+        const msg = msgRaw as {
+          content: Buffer;
+          fields: { routingKey: string };
+        };
 
-    async onModuleDestroy() {
-        await this.channel?.close();
-        await this.connection?.close();
-    }
+        try {
+          const payload = JSON.parse(msg.content.toString()) as unknown;
 
-    async handleMessage(routingKey: string, payload: any) {
+          await this.handleMessage(msg.fields.routingKey, payload);
 
-    }
+          channel.ack(msgRaw);
+        } catch (err) {
+          this.logger.error('consumer error', err as Error);
+          channel.nack(msgRaw, false, false);
+        }
+      },
+      { noAck: false },
+    );
+
+    this.logger.log('consumer started');
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    const channel = this.channel as ChannelLike | undefined;
+    const connection = this.connection as ConnectionLike | undefined;
+
+    await channel?.close();
+    await connection?.close();
+  }
+
+  handleMessage(_routingKey: string, _payload: unknown): Promise<void> {
+    void _routingKey;
+    void _payload;
+
+    return Promise.resolve();
+  }
 }

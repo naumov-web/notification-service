@@ -1,40 +1,37 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
-import {
-    DeliveryRow,
-    DeliveryStats,
-} from './types/delivery.types';
+import { DeliveryRow, DeliveryStats } from './types/delivery.types';
 
 type RawDeliveryRow = {
-    id: string;
-    notificationId: string;
+  id: string;
+  notificationId: string;
 
-    channel: string;
-    target: string;
-    renderedBody: string;
+  channel: string;
+  target: string;
+  renderedBody: string;
 
-    status: string;
+  status: string;
 
-    attempts: number | string;
-    maxRetries: number | string;
+  attempts: number | string;
+  maxRetries: number | string;
 
-    nextRetryAt: string | null;
+  nextRetryAt: string | null;
 
-    createdAt: string;
-    updatedAt: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 @Injectable()
 export class DeliveryQueryService {
-    constructor(private readonly dataSource: DataSource) {}
+  constructor(private readonly dataSource: DataSource) {}
 
-    /**
-     * Батч для обработки (retry / initial)
-     */
-    async getProcessableBatch(limit: number): Promise<DeliveryRow[]> {
-        const rows: RawDeliveryRow[] = await this.dataSource.query(
-            `
+  /**
+   * Батч для обработки (retry / initial)
+   */
+  async getProcessableBatch(limit: number): Promise<DeliveryRow[]> {
+    const rows: RawDeliveryRow[] = await this.dataSource.query(
+      `
       select *
       from deliveries
       where status in ($1, $2)
@@ -43,76 +40,73 @@ export class DeliveryQueryService {
       order by "createdAt" asc
       limit $3
       `,
-            ['pending', 'failed', limit],
-        );
+      ['pending', 'failed', limit],
+    );
 
-        return rows.map((r) => this.mapRow(r));
-    }
+    return rows.map((r) => this.mapRow(r));
+  }
 
-    /**
-     * Все доставки по notification
-     */
-    async getByNotificationId(
-        notificationId: string,
-    ): Promise<DeliveryRow[]> {
-        const rows: RawDeliveryRow[] = await this.dataSource.query(
-            `
+  /**
+   * Все доставки по notification
+   */
+  async getByNotificationId(notificationId: string): Promise<DeliveryRow[]> {
+    const rows: RawDeliveryRow[] = await this.dataSource.query(
+      `
       select *
       from deliveries
       where "notificationId" = $1
       `,
-            [notificationId],
-        );
+      [notificationId],
+    );
 
-        return rows.map((r) => this.mapRow(r));
-    }
+    return rows.map((r) => this.mapRow(r));
+  }
 
-    /**
-     * Все отправлены?
-     */
-    async isAllSent(notificationId: string): Promise<boolean> {
-        const result: { count: string }[] =
-            await this.dataSource.query(
-                `
+  /**
+   * Все отправлены?
+   */
+  async isAllSent(notificationId: string): Promise<boolean> {
+    const result: { count: string }[] = await this.dataSource.query(
+      `
         select count(*) as count
         from deliveries
         where "notificationId" = $1
           and status != $2
         `,
-                [notificationId, 'sent'],
-            );
+      [notificationId, 'sent'],
+    );
 
-        return Number(result[0].count) === 0;
-    }
+    return Number(result[0].count) === 0;
+  }
 
-    /**
-     * Есть ли failed?
-     */
-    async hasFailed(notificationId: string): Promise<boolean> {
-        const result: unknown[] = await this.dataSource.query(
-            `
+  /**
+   * Есть ли failed?
+   */
+  async hasFailed(notificationId: string): Promise<boolean> {
+    const result: unknown[] = await this.dataSource.query(
+      `
       select 1
       from deliveries
       where "notificationId" = $1
         and status = $2
       limit 1
       `,
-            [notificationId, 'failed'],
-        );
+      [notificationId, 'failed'],
+    );
 
-        return result.length > 0;
-    }
+    return result.length > 0;
+  }
 
-    /**
-     * Агрегированная статистика
-     */
-    async getStats(notificationId: string): Promise<DeliveryStats> {
-        const result: {
-            sent: string;
-            failed: string;
-            pending: string;
-        }[] = await this.dataSource.query(
-            `
+  /**
+   * Агрегированная статистика
+   */
+  async getStats(notificationId: string): Promise<DeliveryStats> {
+    const result: {
+      sent: string;
+      failed: string;
+      pending: string;
+    }[] = await this.dataSource.query(
+      `
       select
         count(*) filter (where status = 'sent') as sent,
         count(*) filter (where status = 'failed') as failed,
@@ -120,39 +114,37 @@ export class DeliveryQueryService {
       from deliveries
       where "notificationId" = $1
       `,
-            [notificationId],
-        );
+      [notificationId],
+    );
 
-        return {
-            sent: Number(result[0].sent),
-            failed: Number(result[0].failed),
-            pending: Number(result[0].pending),
-        };
-    }
+    return {
+      sent: Number(result[0].sent),
+      failed: Number(result[0].failed),
+      pending: Number(result[0].pending),
+    };
+  }
 
-    /**
-     * Маппинг raw → typed
-     */
-    private mapRow(row: RawDeliveryRow): DeliveryRow {
-        return {
-            id: row.id,
-            notificationId: row.notificationId,
+  /**
+   * Маппинг raw → typed
+   */
+  private mapRow(row: RawDeliveryRow): DeliveryRow {
+    return {
+      id: row.id,
+      notificationId: row.notificationId,
 
-            channel: row.channel,
-            target: row.target,
-            renderedBody: row.renderedBody,
+      channel: row.channel,
+      target: row.target,
+      renderedBody: row.renderedBody,
 
-            status: row.status as DeliveryRow['status'],
+      status: row.status as DeliveryRow['status'],
 
-            attempts: Number(row.attempts),
-            maxRetries: Number(row.maxRetries),
+      attempts: Number(row.attempts),
+      maxRetries: Number(row.maxRetries),
 
-            nextRetryAt: row.nextRetryAt
-                ? new Date(row.nextRetryAt)
-                : null,
+      nextRetryAt: row.nextRetryAt ? new Date(row.nextRetryAt) : null,
 
-            createdAt: new Date(row.createdAt),
-            updatedAt: new Date(row.updatedAt),
-        };
-    }
+      createdAt: new Date(row.createdAt),
+      updatedAt: new Date(row.updatedAt),
+    };
+  }
 }

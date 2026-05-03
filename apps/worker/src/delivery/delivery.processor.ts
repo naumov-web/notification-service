@@ -4,141 +4,138 @@ import { Repository, DataSource } from 'typeorm';
 
 import { Delivery } from '@app/database/entities/delivery.entity';
 import { ChannelStrategyFactory } from './channel-strategy.factory';
-import {Notification} from "@app/database/entities/notification.entity";
-import {OutboxEvent} from "@app/database/entities/outbox-event.entity";
-import {MetricsService} from "@app/metrics";
+import { Notification } from '@app/database/entities/notification.entity';
+import { OutboxEvent } from '@app/database/entities/outbox-event.entity';
+import { MetricsService } from '@app/metrics';
 
 @Injectable()
 export class DeliveryProcessor {
-    private readonly logger = new Logger(DeliveryProcessor.name);
+  private readonly logger = new Logger(DeliveryProcessor.name);
 
-    constructor(
-        @InjectRepository(Delivery)
-        private readonly repo: Repository<Delivery>,
-        @InjectRepository(Notification)
-        private readonly repoNotification: Repository<Notification>,
-        private readonly factory: ChannelStrategyFactory,
-        private readonly dataSource: DataSource,
-        private readonly metrics: MetricsService
-    ) {}
+  constructor(
+    @InjectRepository(Delivery)
+    private readonly repo: Repository<Delivery>,
+    @InjectRepository(Notification)
+    private readonly repoNotification: Repository<Notification>,
+    private readonly factory: ChannelStrategyFactory,
+    private readonly dataSource: DataSource,
+    private readonly metrics: MetricsService,
+  ) {}
 
-    async process(notificationId: string) {
-        const [deliveries] = await this.dataSource.query(
-            `
-                update deliveries 
-                set status = $1
-                where
-                    "notificationId" = $2
-                    and status = $3
-                returning *;
-            `,
-            [
-                'processing',
-                notificationId,
-                'pending'
-            ]
-        );
-        const notification = await this.repoNotification.findOne({
-            where: { id: notificationId },
-        });
+  async process(notificationId: string) {
+    const raw = (await this.dataSource.query(
+      `
+        update deliveries 
+        set status = $1
+        where
+          "notificationId" = $2
+          and status = $3
+        returning *;
+      `,
+      ['processing', notificationId, 'pending'],
+    )) as unknown;
+    const [deliveries] = raw as [Delivery[], number];
+    const notification = await this.repoNotification.findOne({
+      where: { id: notificationId },
+    });
 
-        if (!notification) {
-            return;
-        }
-
-        for (const delivery of deliveries) {
-            await this.processOne(notification, delivery);
-        }
-
-        await this.updateNotificationStatus(notificationId);
+    if (!notification) {
+      return;
     }
 
-    async processOneById(deliveryId: string) {
-        const delivery = await this.repo.findOne({
-            where: { id: deliveryId },
-        });
-
-        if (!delivery) {
-            return;
-        }
-
-        if (delivery.status === 'sent') {
-            return;
-        }
-
-        const notification = await this.repoNotification.findOne({
-            where: { id: delivery.notificationId },
-        });
-
-        if (!notification) {
-            return;
-        }
-
-        await this.processOne(notification, delivery);
+    for (const delivery of deliveries) {
+      await this.processOne(notification, delivery);
     }
 
-    private async processOne(notification: Notification, delivery: Delivery) {
-        const queryRunner = this.dataSource.createQueryRunner();
-        await queryRunner.connect();
-        await queryRunner.startTransaction();
-        let status: string = 'sent';
-        this.metrics.deliveriesTotal.inc({
-            channel: delivery.channel,
-        });
-        if (delivery.attempts > 0) {
-            this.metrics.retriesTotal.inc({
-                channel: delivery.channel,
-            });
-        }
+    await this.updateNotificationStatus(notificationId);
+  }
 
-        try {
-            const strategy = this.factory.get(delivery.channel);
+  async processOneById(deliveryId: string) {
+    const delivery = await this.repo.findOne({
+      where: { id: deliveryId },
+    });
 
-            await strategy.send({
-                target: delivery.target,
-                content: delivery.renderedBody,
-            });
-
-            delivery.status = 'sent';
-            await this.repo.save(delivery);
-            this.metrics.deliveriesSent.inc({
-                channel: delivery.channel,
-            });
-        } catch (err) {
-            this.logger.error(`delivery failed ${delivery.id}`, err);
-
-            delivery.status = 'failed';
-            delivery.attempts += 1;
-
-            await this.repo.save(delivery);
-            status = 'failed';
-            this.metrics.deliveriesFailed.inc({
-                channel: delivery.channel,
-            });
-        } finally {
-            const analyticsEvent = queryRunner.manager.create(OutboxEvent, {
-                type: 'analytics.event',
-                payload: {
-                    eventTime: new Date(),
-                    notificationId: delivery.notificationId,
-                    deliveryId: delivery.id,
-                    userId: notification.userId,
-                    eventType: notification.eventType,
-                    channel: delivery.channel,
-                    status,
-                    isRetry: delivery.attempts > 0,
-                },
-            });
-
-            await queryRunner.manager.save(analyticsEvent);
-            await queryRunner.commitTransaction();
-            await queryRunner.release();
-        }
+    if (!delivery) {
+      return;
     }
 
-    private async updateNotificationStatus(notificationId: string) {
-        await this.repoNotification.query(
-            `update notifications n
+    if (delivery.status === 'sent') {
+      return;
+    }
+
+    const notification = await this.repoNotification.findOne({
+      where: { id: delivery.notificationId },
+    });
+
+    if (!notification) {
+      return;
+    }
+
+    await this.processOne(notification, delivery);
+  }
+
+  private async processOne(notification: Notification, delivery: Delivery) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    let status: string = 'sent';
+    this.metrics.deliveriesTotal.inc({
+      channel: delivery.channel,
+    });
+    if (delivery.attempts > 0) {
+      this.metrics.retriesTotal.inc({
+        channel: delivery.channel,
+      });
+    }
+
+    try {
+      const strategy = this.factory.get(delivery.channel);
+
+      await strategy.send({
+        target: delivery.target,
+        content: delivery.renderedBody,
+      });
+
+      delivery.status = 'sent';
+      await this.repo.save(delivery);
+      this.metrics.deliveriesSent.inc({
+        channel: delivery.channel,
+      });
+    } catch (err) {
+      this.logger.error(`delivery failed ${delivery.id}`, err);
+
+      delivery.status = 'failed';
+      delivery.attempts += 1;
+
+      await this.repo.save(delivery);
+      status = 'failed';
+      this.metrics.deliveriesFailed.inc({
+        channel: delivery.channel,
+      });
+    } finally {
+      const analyticsEvent = queryRunner.manager.create(OutboxEvent, {
+        type: 'analytics.event',
+        payload: {
+          eventTime: new Date(),
+          notificationId: delivery.notificationId,
+          deliveryId: delivery.id,
+          userId: notification.userId,
+          eventType: notification.eventType,
+          channel: delivery.channel,
+          status,
+          isRetry: delivery.attempts > 0,
+        },
+      });
+
+      await queryRunner.manager.save(analyticsEvent);
+      await queryRunner.commitTransaction();
+      await queryRunner.release();
+    }
+  }
+
+  private async updateNotificationStatus(notificationId: string) {
+    await this.repoNotification.query(
+      `update notifications n
              set status = case
                               when not exists (
                                   select 1
@@ -158,14 +155,7 @@ export class DeliveryProcessor {
                  end
              where n.id = $1
             `,
-            [
-                notificationId,
-                'sent',
-                'done',
-                'failed',
-                'failed',
-                'processing',
-            ],
-        );
-    }
+      [notificationId, 'sent', 'done', 'failed', 'failed', 'processing'],
+    );
+  }
 }

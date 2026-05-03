@@ -8,15 +8,13 @@ import { DeliveryRow } from '@app/query/types/delivery.types';
 
 @Injectable()
 export class DeliveryRetryProcessor {
-    private readonly batchSize = 50;
+  private readonly batchSize = 50;
 
-    constructor(
-        private readonly dataSource: DataSource,
-    ) {}
+  constructor(private readonly dataSource: DataSource) {}
 
-    async processBatch(): Promise<void> {
-        const [deliveries] = await this.dataSource.query(
-            `
+  async processBatch(): Promise<void> {
+    const raw = (await this.dataSource.query(
+      `
                 update deliveries set status = 'processing'
                 where id in (
                     select id
@@ -29,73 +27,72 @@ export class DeliveryRetryProcessor {
                 )
                 returning *;
             `,
-            ['failed', this.batchSize]
+      ['failed', this.batchSize],
+    )) as unknown;
+    const [deliveries] = raw as [DeliveryRow[], number];
+    for (const delivery of deliveries) {
+      await this.processOne(delivery);
+    }
+  }
+
+  private async processOne(delivery: DeliveryRow): Promise<void> {
+    const attempts = (delivery.attempts ?? 0) + 1;
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      if (attempts >= delivery.maxRetries) {
+        await queryRunner.manager.update(
+          Delivery,
+          { id: delivery.id },
+          {
+            status: 'failed',
+            attempts,
+          },
         );
 
-        for (const delivery of deliveries) {
-            await this.processOne(delivery);
-        }
+        await queryRunner.commitTransaction();
+        return;
+      }
+
+      const nextRetryAt = this.calculateNextRetry(attempts);
+
+      await queryRunner.manager.update(
+        Delivery,
+        { id: delivery.id },
+        {
+          status: 'processing',
+          attempts,
+          nextRetryAt,
+        },
+      );
+
+      const event = queryRunner.manager.create(OutboxEvent, {
+        type: 'delivery.retry',
+        payload: {
+          deliveryId: delivery.id,
+          isRetry: true,
+        },
+      });
+
+      await queryRunner.manager.save(event);
+
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
     }
+  }
 
-    private async processOne(delivery: DeliveryRow): Promise<void> {
-        const attempts = (delivery.attempts ?? 0) + 1;
+  private calculateNextRetry(attempts: number): Date {
+    const delays = [10, 30, 60, 300];
 
-        const queryRunner = this.dataSource.createQueryRunner();
-        await queryRunner.connect();
-        await queryRunner.startTransaction();
+    const delay = delays[Math.min(attempts - 1, delays.length - 1)];
 
-        try {
-            if (attempts >= delivery.maxRetries) {
-                await queryRunner.manager.update(
-                    Delivery,
-                    { id: delivery.id },
-                    {
-                        status: 'failed',
-                        attempts,
-                    },
-                );
-
-                await queryRunner.commitTransaction();
-                return;
-            }
-
-            const nextRetryAt = this.calculateNextRetry(attempts);
-
-            await queryRunner.manager.update(
-                Delivery,
-                { id: delivery.id },
-                {
-                    status: 'processing',
-                    attempts,
-                    nextRetryAt,
-                },
-            );
-
-            const event = queryRunner.manager.create(OutboxEvent, {
-                type: 'delivery.retry',
-                payload: {
-                    deliveryId: delivery.id,
-                    isRetry: true,
-                },
-            });
-
-            await queryRunner.manager.save(event);
-
-            await queryRunner.commitTransaction();
-        } catch (error) {
-            await queryRunner.rollbackTransaction();
-            throw error;
-        } finally {
-            await queryRunner.release();
-        }
-    }
-
-    private calculateNextRetry(attempts: number): Date {
-        const delays = [10, 30, 60, 300];
-
-        const delay =
-            delays[Math.min(attempts - 1, delays.length - 1)];
-
-        return new Date(Date.now() + delay * 1000);
-    }
+    return new Date(Date.now() + delay * 1000);
+  }
 }

@@ -1,30 +1,35 @@
 export type NotificationStatus =
-    | 'pending'
-    | 'processing'
-    | 'done'
-    | 'failed'
-    | 'cancelled';
+  | 'pending'
+  | 'processing'
+  | 'done'
+  | 'failed'
+  | 'cancelled';
 
 export interface NotificationRow {
-    id: string;
+  id: string;
 
-    userId: string;
-    eventType: string;
-    parameters: Record<string, any>;
+  userId: string;
+  eventType: string;
+  parameters: Record<string, any>;
 
-    status: NotificationStatus;
+  status: NotificationStatus;
 
-    createdAt: Date;
-    updatedAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface DeliveryRow {
+  id: string;
+  channel: string;
+  status: string;
+  target: string;
+}
+
+export interface CountRow {
+  count: number;
 }
 
 export interface NotificationDetails {
-    notification: NotificationRow;
-
-    deliveries: {
-        id: string;
-        channel: string;
-        status: string;
-        target: string;
-    }[];
+  notification: NotificationRow;
+  deliveries: DeliveryRow[];
 }

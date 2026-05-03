@@ -1,4 +1,4 @@
 export interface EventHandlerStrategy {
-    supports(eventType: string): boolean;
-    handle(payload: any): Promise<void>;
+  supports(eventType: string): boolean;
+  handle(payload: any): Promise<void>;
 }

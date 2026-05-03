@@ -3,10 +3,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule as CoreAuthModule } from '@app/auth';
 
 import { AuthController } from './auth.controller';
-import {AdminUser} from "@app/database/entities/admin-user.entity";
+import { AdminUser } from '@app/database/entities/admin-user.entity';
 
 @Module({
-    imports: [CoreAuthModule, TypeOrmModule.forFeature([AdminUser])],
-    controllers: [AuthController],
+  imports: [CoreAuthModule, TypeOrmModule.forFeature([AdminUser])],
+  controllers: [AuthController],
 })
 export class AuthModule {}

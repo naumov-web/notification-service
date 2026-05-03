@@ -1,8 +1,7 @@
 import { Module } from '@nestjs/common';
-import { TemplatesService } from './templates.service';
 
 @Module({
-  providers: [TemplatesService],
-  exports: [TemplatesService],
+  providers: [],
+  exports: [],
 })
 export class TemplatesModule {}

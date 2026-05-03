@@ -2,35 +2,35 @@ import { Injectable, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
 import {
-    OutboxEvent,
-    OutboxStatus,
+  OutboxEvent,
+  OutboxStatus,
 } from '@app/database/entities/outbox-event.entity';
 
 import { RabbitMQService } from '@app/queue/rabbitmq.service';
 
 @Injectable()
 export class OutboxProcessor {
-    private readonly logger = new Logger(OutboxProcessor.name);
+  private readonly logger = new Logger(OutboxProcessor.name);
 
-    private readonly maxRetries = 5;
-    private readonly batchSize = 50;
+  private readonly maxRetries = 5;
+  private readonly batchSize = 50;
 
-    constructor(
-        private readonly dataSource: DataSource,
-        private readonly rabbit: RabbitMQService,
-    ) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly rabbit: RabbitMQService,
+  ) {}
 
-    async processBatch() {
-        const [events] = await this.lockBatch(this.batchSize);
+  async processBatch() {
+    const [events] = await this.lockBatch(this.batchSize);
 
-        for (const event of events) {
-            await this.processEvent(event);
-        }
+    for (const event of events) {
+      await this.processEvent(event);
     }
+  }
 
-    private async lockBatch(limit: number): Promise<[OutboxEvent[], number]> {
-        return this.dataSource.query(
-            `
+  private async lockBatch(limit: number): Promise<[OutboxEvent[], number]> {
+    return this.dataSource.query(
+      `
                 update outbox_events oe
                 set status = $1
                     from (
@@ -54,85 +54,73 @@ export class OutboxProcessor {
                 where oe.id = sub.id
                 returning oe.*;
             `,
-            [
-                OutboxStatus.PROCESSING,
-                OutboxStatus.PENDING,
-                OutboxStatus.FAILED,
-                limit,
-            ],
-        );
-    }
+      [
+        OutboxStatus.PROCESSING,
+        OutboxStatus.PENDING,
+        OutboxStatus.FAILED,
+        limit,
+      ],
+    );
+  }
 
-    private async processEvent(event: OutboxEvent) {
-        try {
-            await this.publish(event);
-            await this.markProcessed(event.id);
-        } catch (err) {
-            this.logger.error(`failed event ${event.id}`, err);
-            await this.handleFailure(event);
-        }
+  private async processEvent(event: OutboxEvent) {
+    try {
+      await this.publish(event);
+      await this.markProcessed(event.id);
+    } catch (err) {
+      this.logger.error(`failed event ${event.id}`, err);
+      await this.handleFailure(event);
     }
+  }
 
-    private async publish(event: OutboxEvent) {
-        await this.rabbit.publish(event.type, event.payload);
-    }
+  private async publish(event: OutboxEvent) {
+    await this.rabbit.publish(event.type, event.payload);
+  }
 
-    private async markProcessed(id: string) {
-        await this.dataSource.query(
-            `update outbox_events
+  private async markProcessed(id: string) {
+    await this.dataSource.query(
+      `update outbox_events
               set status = $1
               where id = $2
               `,
-            [
-                OutboxStatus.PROCESSED,
-                id,
-            ],
-        );
-    }
+      [OutboxStatus.PROCESSED, id],
+    );
+  }
 
-    private async handleFailure(event: OutboxEvent) {
-        const attempts = event.attempts + 1;
+  private async handleFailure(event: OutboxEvent) {
+    const attempts = event.attempts + 1;
 
-        if (attempts >= this.maxRetries) {
-            await this.dataSource.query(
-                `update outbox_events
+    if (attempts >= this.maxRetries) {
+      await this.dataSource.query(
+        `update outbox_events
                 set status = $1,
                     attempts = $2
                 where id = $3
                 `,
-                [
-                    OutboxStatus.FAILED,
-                    attempts,
-                    event.id,
-                ],
-            );
+        [OutboxStatus.FAILED, attempts, event.id],
+      );
 
-            return;
-        }
+      return;
+    }
 
-        const nextRetryAt = this.calculateNextRetry(attempts);
+    const nextRetryAt = this.calculateNextRetry(attempts);
 
-        await this.dataSource.query(
-            `update outbox_events
+    await this.dataSource.query(
+      `update outbox_events
                 set status = $1,
                     attempts = $2,
                     "nextRetryAt" = $3
                 where id = $4
             `,
-            [
-                OutboxStatus.PENDING,
-                attempts,
-                nextRetryAt,
-                event.id,
-            ],
-        );
-    }
+      [OutboxStatus.PENDING, attempts, nextRetryAt, event.id],
+    );
+  }
 
-    private calculateNextRetry(attempts: number): Date {
-        const delays = [10, 60, 300, 900];
+  private calculateNextRetry(attempts: number): Date {
+    const delays = [10, 60, 300, 900];
 
-        const delay = delays[Math.min(attempts - 1, delays.length - 1)];
+    const delay = delays[Math.min(attempts - 1, delays.length - 1)];
 
-        return new Date(Date.now() + delay * 1000);
-    }
+    return new Date(Date.now() + delay * 1000);
+  }
 }
