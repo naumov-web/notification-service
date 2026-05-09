@@ -7,6 +7,7 @@ import { AuthModule as AuthApiModule } from './auth/auth.module';
 import { StatsModule } from './stats/stats.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { HealthModule } from './health/health.module';
+import { TemplatesModule } from './templates/templates.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { HealthModule } from './health/health.module';
     StatsModule,
     MetricsModule,
     HealthModule,
+    TemplatesModule,
   ],
   controllers: [],
   providers: [ApiService],
