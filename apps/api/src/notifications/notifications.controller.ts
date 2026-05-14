@@ -7,6 +7,7 @@ import {
   Delete,
   Query,
   Param,
+  Headers,
 } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
@@ -38,8 +39,11 @@ export class NotificationsController {
     status: 201,
     description: 'Notification created',
   })
-  create(@Body() dto: CreateNotificationDto) {
-    return this.service.create(dto);
+  create(
+    @Body() dto: CreateNotificationDto,
+    @Headers('idempotency-key') idempotencyKey: string,
+  ) {
+    return this.service.create(dto, idempotencyKey);
   }
 
   @ApiBearerAuth()
