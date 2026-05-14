@@ -44,4 +44,10 @@ export class Notification {
   @CreateDateColumn()
   @Index()
   createdAt: Date;
+
+  @Column({
+    nullable: true,
+    unique: true,
+  })
+  idempotencyKey?: string;
 }

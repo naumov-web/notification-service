@@ -25,10 +25,24 @@ import { CreateNotificationDto } from './dto/create-notification.dto';
 export class NotificationsService {
   constructor(private readonly dataSource: DataSource) {}
 
-  async create(dto: CreateNotificationDto): Promise<Notification> {
+  async create(
+    dto: CreateNotificationDto,
+    idempotencyKey: string,
+  ): Promise<Notification> {
     const queryRunner = this.dataSource.createQueryRunner();
-
     await queryRunner.connect();
+
+    const existing: Notification | null =
+      await queryRunner.manager.findOne<Notification>(Notification, {
+        where: {
+          idempotencyKey,
+        },
+      });
+
+    if (existing) {
+      return existing;
+    }
+
     await queryRunner.startTransaction();
 
     try {
@@ -37,6 +51,7 @@ export class NotificationsService {
         eventType: dto.eventType,
         parameters: dto.parameters,
         sendAt: dto.sendAt ? new Date(dto.sendAt) : undefined,
+        idempotencyKey,
       });
 
       await queryRunner.manager.save(notification);
